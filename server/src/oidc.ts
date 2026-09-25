@@ -1,0 +1,30 @@
+import {Router} from 'express';
+import * as oidc from 'openid-client';
+import {config} from './config.js';
+import {query} from './db.js';
+import {hash,random,userById,createSession} from './auth.js';
+import {ensure} from './errors.js';
+export const oidcRouter=Router();
+export const oidcEnabled=Boolean(config.OIDC_ISSUER&&config.OIDC_CLIENT_ID);
+let discovery:Promise<oidc.Configuration>|undefined;
+const getConfig=()=>discovery??=oidc.discovery(new URL(config.OIDC_ISSUER!),config.OIDC_CLIENT_ID!,config.OIDC_CLIENT_SECRET);
+const cookieName=config.secure?'__Host-alertx_oidc':'alertx_oidc';
+const cookie={httpOnly:true,secure:config.secure,sameSite:'lax' as const,path:'/',maxAge:600000};
+const redirect_uri=`${config.origin}/api/auth/oidc/callback`;
+oidcRouter.get('/start',async(req,res)=>{
+ ensure(oidcEnabled,503,'Organizational sign-in is not configured');
+ const cfg=await getConfig(),state=oidc.randomState(),nonce=oidc.randomNonce(),verifier=oidc.randomPKCECodeVerifier(),browser=random();
+ await query("INSERT INTO oidc_transactions(state_hash,browser_hash,verifier,nonce,expires_at) VALUES($1,$2,$3,$4,now()+interval '10 minutes')",[hash(state),hash(browser),verifier,nonce]);
+ res.cookie(cookieName,browser,cookie);
+ const url=oidc.buildAuthorizationUrl(cfg,{redirect_uri,scope:'openid email profile',state,nonce,code_challenge:await oidc.calculatePKCECodeChallenge(verifier),code_challenge_method:'S256'});res.redirect(url.href);
+});
+oidcRouter.get('/callback',async(req,res)=>{
+ ensure(oidcEnabled,503,'Organizational sign-in is not configured');
+ const state=String(req.query.state||''),browser=req.cookies?.[cookieName];ensure(state&&typeof browser==='string',400,'Invalid sign-in callback');
+ const t=(await query('DELETE FROM oidc_transactions WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>now() RETURNING verifier,nonce',[hash(state),hash(browser)])).rows[0];ensure(t,400,'Sign-in request expired. Try again');
+ const cfg=await getConfig();const tokens=await oidc.authorizationCodeGrant(cfg,new URL(req.originalUrl,config.origin),{pkceCodeVerifier:t.verifier,expectedState:state,expectedNonce:t.nonce,idTokenExpected:true});
+ const claims=tokens.claims();ensure(claims?.sub,401,'Identity token required');
+ const identity=(await query('SELECT user_id FROM oidc_identities WHERE issuer=$1 AND subject=$2',[claims.iss,claims.sub])).rows[0];ensure(identity,403,'This organizational identity has not been assigned an Alert X account');
+ const user=await userById(identity.user_id);ensure(user,403,'Account is unavailable');
+ await createSession(req,res,user);res.clearCookie(cookieName,{...cookie,maxAge:undefined});res.redirect('/');
+});

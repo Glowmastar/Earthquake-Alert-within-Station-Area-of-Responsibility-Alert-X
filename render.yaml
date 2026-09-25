@@ -1,0 +1,130 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
+# Alert X production baseline for Render.
+# Secrets use sync: false so they are entered in the Render dashboard and never
+# committed. Ingestion and delivery remain disabled until the runbook gates pass.
+previews:
+  generation: off
+
+databases:
+  - name: alertx-db
+    region: singapore
+    plan: 0.5c-1g
+    postgresMajorVersion: "16"
+    databaseName: alertx
+    user: alertx
+    diskSizeGB: 15
+    storageAutoscalingEnabled: true
+    ipAllowList: []
+
+services:
+  - type: web
+    runtime: docker
+    name: alertx-api
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node build/server/index.js
+    preDeployCommand: node build/server/migrate.js
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: alertx-db
+          property: connectionString
+      # The Render internal database URL uses the private same-region network.
+      # Use DB_SSL=true only with an external TLS endpoint and a trusted CA file.
+      - key: DB_SSL
+        value: "false"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SESSION_HOURS
+        value: "8"
+      - key: INGESTION_ENABLED
+        value: "false"
+      - key: DELIVERY_ENABLED
+        value: "false"
+      - key: RAW_ARCHIVE_BACKEND
+        value: S3
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        value: ap-southeast-1
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+
+  - type: worker
+    runtime: docker
+    name: alertx-worker
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node build/server/worker.js
+    # Both services run the checksummed, advisory-locked migration command.
+    # This prevents the worker from starting against an older schema when
+    # Render deploys the two services concurrently.
+    preDeployCommand: node build/server/migrate.js
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 120
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ORIGIN
+        fromService:
+          type: web
+          name: alertx-api
+          envVarKey: APP_ORIGIN
+      - key: DATABASE_URL
+        fromDatabase:
+          name: alertx-db
+          property: connectionString
+      - key: DB_SSL
+        value: "false"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SESSION_HOURS
+        value: "8"
+      - key: INGESTION_ENABLED
+        value: "false"
+      - key: DELIVERY_ENABLED
+        value: "false"
+      - key: RAW_ARCHIVE_BACKEND
+        value: S3
+      - key: S3_BUCKET
+        fromService:
+          type: web
+          name: alertx-api
+          envVarKey: S3_BUCKET
+      - key: S3_REGION
+        value: ap-southeast-1
+      - key: S3_ENDPOINT
+        fromService:
+          type: web
+          name: alertx-api
+          envVarKey: S3_ENDPOINT
+      - key: S3_ACCESS_KEY_ID
+        fromService:
+          type: web
+          name: alertx-api
+          envVarKey: S3_ACCESS_KEY_ID
+      - key: S3_SECRET_ACCESS_KEY
+        fromService:
+          type: web
+          name: alertx-api
+          envVarKey: S3_SECRET_ACCESS_KEY
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"

@@ -1,0 +1,2 @@
+-- Use npm run db:migrate to apply the checksummed migration chain.
+-- The original supplied schema is preserved in migrations/001_base_schema.sql.

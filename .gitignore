@@ -1,0 +1,10 @@
+node_modules/
+build/
+dist/
+.env
+.env.*
+!.env.example
+test-results/
+*.log
+_review_zip/
+_docx_render/
