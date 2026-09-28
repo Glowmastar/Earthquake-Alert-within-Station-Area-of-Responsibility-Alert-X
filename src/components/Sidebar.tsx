@@ -10,20 +10,23 @@ import {
   FileText,
   BarChart2,
   ScrollText,
-  Settings,
+  Shield,
+  IdCard,
   X,
+  Radio,
 } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface SidebarProps {
   currentView: string;
   currentFilter?: string;
-  currentMapSubView?: 'STATION_BOUNDARIES' | 'BOUNDARY_REVIEW' | 'EPICENTERS';
+  currentMapSubView?: 'STATION_BOUNDARIES' | 'BOUNDARY_REVIEW';
   onNavigate: (view: string, filter?: string) => void;
   reviewCount?: number;
   recipientCount?: number;
   isOpenMobile?: boolean;
+  currentUser?: UserProfile;
   onCloseMobile?: () => void;
-  isAdmin?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -33,13 +36,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNavigate,
   reviewCount = 27,
   isOpenMobile = false,
+  currentUser,
   onCloseMobile,
-  isAdmin = false,
 }) => {
   const [recordsExpanded, setRecordsExpanded] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(true);
   const [intensityExpanded, setIntensityExpanded] = useState(true);
-  const [settingsExpanded, setSettingsExpanded] = useState(true);
+  const [adminExpanded, setAdminExpanded] = useState(true);
 
   const handleNavigate = (view: string, filter?: string) => {
     onNavigate(view, filter);
@@ -109,6 +112,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Station Scope Banner (when PCP scoped) */}
+          {currentUser?.assignedAor === 'PCP' && (
+            <div className="mt-3.5 p-2.5 rounded-xl bg-blue-950/80 border border-blue-700/60 shadow-inner">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="font-bold text-white text-[11px] block truncate">
+                    Palayan Station (PCP)
+                  </span>
+                  <span className="text-[9px] text-cyan-300 block truncate">
+                    User Role &bull; Scoped to PCP AOR
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Navigation Items */}
           <nav className="mt-6 space-y-1 text-xs">
@@ -266,37 +286,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   type="button"
                   onClick={() => handleNavigate('map', 'STATION_BOUNDARIES')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'map' && currentMapSubView !== 'BOUNDARY_REVIEW' && currentMapSubView !== 'EPICENTERS'
+                    currentView === 'map' && currentMapSubView !== 'BOUNDARY_REVIEW'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'map' && currentMapSubView !== 'BOUNDARY_REVIEW' && currentMapSubView !== 'EPICENTERS'
+                      currentView === 'map' && currentMapSubView !== 'BOUNDARY_REVIEW'
                         ? 'bg-white'
                         : 'bg-slate-400'
                     }`}
                   />
                   <span>Station Boundaries</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('map', 'EPICENTERS')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'map' && currentMapSubView === 'EPICENTERS'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'map' && currentMapSubView === 'EPICENTERS'
-                        ? 'bg-white'
-                        : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>Epicenters</span>
                 </button>
                 <button
                   type="button"
@@ -480,41 +482,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
           >
             <ScrollText className="w-4 h-4 shrink-0" />
-            <span>{isAdmin?'Audit Log':'Station Activity'}</span>
+            <span>Audit Log</span>
           </button>
 
-          {/* Settings Dropdown */}
+          {/* Administration Dropdown */}
           <div>
             <div
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
-                currentView === 'settings'
-                  ? 'bg-blue-600 text-white shadow-xs'
+                currentView === 'settings' || currentView === 'roles'
+                  ? 'text-white'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
               }`}
             >
               <button
                 type="button"
                 onClick={() => {
-                  handleNavigate('settings', 'AOR_RULES');
-                  setSettingsExpanded(true);
+                  handleNavigate('settings', 'ROLES');
+                  setAdminExpanded(true);
                 }}
                 className="flex items-center gap-3 flex-1 text-left focus:outline-none"
                 title="Go to Administration"
               >
-                <Settings className="w-4 h-4 shrink-0" />
-                <span>{isAdmin?'Administration':'Station Settings'}</span>
+                <Shield className="w-4 h-4 shrink-0" />
+                <span>Administration</span>
               </button>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSettingsExpanded(!settingsExpanded);
+                  setAdminExpanded(!adminExpanded);
                 }}
                 className="p-1 hover:bg-white/10 rounded transition-colors"
-                title={settingsExpanded ? "Collapse section" : "Expand section"}
-                aria-label={settingsExpanded ? "Collapse section" : "Expand section"}
+                title={adminExpanded ? "Collapse section" : "Expand section"}
+                aria-label={adminExpanded ? "Collapse section" : "Expand section"}
               >
-                {settingsExpanded ? (
+                {adminExpanded ? (
                   <ChevronUp className="w-3.5 h-3.5" />
                 ) : (
                   <ChevronDown className="w-3.5 h-3.5" />
@@ -522,9 +524,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {settingsExpanded && (
+            {adminExpanded && (
               <div className="mt-1 ml-2 pl-2 space-y-1">
-                {isAdmin && (
                 <button
                   type="button"
                   onClick={() => handleNavigate('settings', 'EQINFO_SOURCE')}
@@ -543,24 +544,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   />
                   <span>EQInfo Source</span>
                 </button>
-                )}
                 <button
                   type="button"
                   onClick={() => handleNavigate('settings', 'AOR_RULES')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'settings' && (currentFilter === 'AOR_RULES' || currentFilter === 'ALL' || !currentFilter)
+                    currentView === 'settings' && currentFilter === 'AOR_RULES'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'settings' && (currentFilter === 'AOR_RULES' || currentFilter === 'ALL' || !currentFilter)
+                      currentView === 'settings' && currentFilter === 'AOR_RULES'
                         ? 'bg-white'
                         : 'bg-slate-400'
                     }`}
                   />
                   <span>AOR Rules</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('settings', 'ROLES')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentView === 'roles' || (currentView === 'settings' && currentFilter === 'ROLES')
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <IdCard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Roles</span>
                 </button>
               </div>
             )}

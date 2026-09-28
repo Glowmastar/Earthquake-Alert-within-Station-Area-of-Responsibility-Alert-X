@@ -1,0 +1,776 @@
+import { EarthquakeRecord, Recipient, AuditLog, AORZoneInfo } from '../types';
+
+const BASE_EARTHQUAKES: EarthquakeRecord[] = [
+  {
+    id: 'PHIVOLCS-2025-0423-0013',
+    timePHT: 'Apr 23, 2025 08:14 AM',
+    date: '2025-04-23',
+    location: 'Dalupiri Island',
+    magnitude: 4.8,
+    depthKm: 10,
+    province: 'Cagayan',
+    municipality: 'Calayan',
+    provinceMunicipality: 'Cagayan Calayan',
+    aor: 'PCP',
+    aorStatus: 'Inside',
+    status: 'Alert Sent',
+    coordinates: { lat: 19.1250, lng: 122.0570 },
+    isRecent24h: true,
+    intensity: 'PEIS IV - Moderately Strong',
+    source: 'PHIVOLCS EQInfo',
+    faultSystem: 'Babuyan Segment',
+    stationName: 'Palayan Seismic Station',
+    matchedAORFull: 'PCP (Palayan Seismic Station)',
+    recipientName: 'Wilmer A. Legaspi',
+    recipientRole: '(PCP Station Personnel)',
+    deliveryStatus: 'Success',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'Dalupiri Island, Cagayan',
+    alertDetails: {
+      sentAt: 'Apr 23, 2025 08:16 AM',
+      recipientsCount: 12,
+      deliveryRate: '100%',
+      notes: 'Automated email dispatch initiated within 120s of preliminary seismic bulletin.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0422-0098',
+    timePHT: 'Apr 22, 2025 08:27 PM',
+    date: '2025-04-22',
+    location: 'Hinatuan',
+    magnitude: 3.9,
+    depthKm: 33,
+    province: 'Surigao del Sur',
+    municipality: 'Hinatuan',
+    provinceMunicipality: 'Surigao del Sur Hinatuan',
+    aor: 'CGP',
+    aorStatus: 'Inside',
+    status: 'Alert Sent',
+    coordinates: { lat: 8.3610, lng: 126.3320 },
+    isRecent24h: true,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'Cotabato Seismic Station',
+    matchedAORFull: 'CGP (Cotabato Seismic Station)',
+    recipientName: 'Dr. Roland Reyes',
+    recipientRole: '(CGP Station Personnel)',
+    deliveryStatus: 'Success',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'Hinatuan, Surigao del Sur',
+    alertDetails: {
+      sentAt: 'Apr 22, 2025 08:29 PM',
+      recipientsCount: 8,
+      deliveryRate: '100%',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0422-0095',
+    timePHT: 'Apr 22, 2025 07:45 PM',
+    date: '2025-04-22',
+    location: 'Tandag',
+    magnitude: 4.2,
+    depthKm: 18,
+    province: 'Surigao del Sur',
+    municipality: 'Tandag',
+    provinceMunicipality: 'Surigao del Sur Tandag',
+    aor: 'BIP',
+    aorStatus: 'Inside',
+    status: 'Pending Alert',
+    coordinates: { lat: 9.0820, lng: 126.2040 },
+    isRecent24h: true,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'Bicol Seismic Station',
+    matchedAORFull: 'BIP (Bicol Seismic Station)',
+    recipientName: 'Engr. Vicente Ramos',
+    recipientRole: '(BIP Station Personnel)',
+    deliveryStatus: 'Pending',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'Tandag, Surigao del Sur',
+    alertDetails: {
+      recipientsCount: 4,
+      notes: 'Alert staged for approval following revised magnitude calculation.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0422-0091',
+    timePHT: 'Apr 22, 2025 03:12 PM',
+    date: '2025-04-22',
+    location: 'General Santos City',
+    magnitude: 3.6,
+    depthKm: 62,
+    province: 'South Cotabato',
+    municipality: 'General Santos City',
+    provinceMunicipality: 'South Cotabato General Santos City',
+    aor: 'CGP',
+    aorStatus: 'Inside',
+    status: 'Alert Sent',
+    coordinates: { lat: 6.1130, lng: 125.1710 },
+    isRecent24h: true,
+    intensity: 'PEIS II - Slightly Felt',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'Cotabato Seismic Station',
+    matchedAORFull: 'CGP (Cotabato Seismic Station)',
+    recipientName: 'Chief Insp. Manuel Torres',
+    recipientRole: '(CGP Station Personnel)',
+    deliveryStatus: 'Success',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'General Santos City, South Cotabato',
+    alertDetails: {
+      sentAt: 'Apr 22, 2025 03:14 PM',
+      recipientsCount: 8,
+      deliveryRate: '100%',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0421-0087',
+    timePHT: 'Apr 21, 2025 11:03 PM',
+    date: '2025-04-21',
+    location: 'Mati',
+    magnitude: 4.7,
+    depthKm: 28,
+    province: 'Davao Oriental',
+    municipality: 'Mati',
+    provinceMunicipality: 'Davao Oriental Mati',
+    aor: 'BIP',
+    aorStatus: 'Inside',
+    status: 'For Review',
+    coordinates: { lat: 6.9550, lng: 126.2130 },
+    isRecent24h: true,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'Bicol Seismic Station',
+    matchedAORFull: 'BIP (Bicol Seismic Station)',
+    recipientName: 'Director Grace Tan',
+    recipientRole: '(BIP Station Personnel)',
+    deliveryStatus: 'Under Review',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'Mati, Davao Oriental',
+    alertDetails: {
+      notes: 'Sub-fault boundary tolerance buffer flag requires verification.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0421-0076',
+    timePHT: 'Apr 21, 2025 06:18 PM',
+    date: '2025-04-21',
+    location: 'Palayan City',
+    magnitude: 4.1,
+    depthKm: 15,
+    province: 'Nueva Ecija',
+    municipality: 'Palayan City',
+    provinceMunicipality: 'Nueva Ecija Palayan City',
+    aor: 'PCP',
+    aorStatus: 'Inside',
+    status: 'Alert Sent',
+    coordinates: { lat: 15.5410, lng: 121.0840 },
+    isRecent24h: true,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'Palayan Seismic Station',
+    matchedAORFull: 'PCP (Palayan Seismic Station)',
+    recipientName: 'Wilmer A. Legaspi',
+    recipientRole: '(PCP Station Personnel)',
+    deliveryStatus: 'Success',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'Palayan City, Nueva Ecija',
+    alertDetails: {
+      sentAt: 'Apr 21, 2025 06:20 PM',
+      recipientsCount: 12,
+      deliveryRate: '100%',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0423-0010',
+    timePHT: 'Apr 23, 2025 04:56 AM',
+    date: '2025-04-23',
+    location: 'Baganga, Davao Oriental',
+    magnitude: 4.3,
+    depthKm: 12,
+    province: 'Davao Oriental',
+    municipality: 'Baganga',
+    provinceMunicipality: 'Davao Oriental Baganga',
+    aor: 'Outside AOR',
+    aorStatus: 'Outside',
+    status: 'Outside AOR',
+    coordinates: { lat: 7.5720, lng: 126.5640 },
+    isRecent24h: true,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'None (Outside Perimeter)',
+    matchedAORFull: 'Outside All AORs',
+    nearestStation: 'CGP (Cotabato Seismic Station)',
+    distanceToBoundaryKm: 46.8,
+    epicenterZone: 'Offshore Philippine Trench',
+    outsideReason: 'Epicenter sits 46.8 km east beyond CGP eastern coastal buffer boundary',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'East of Baganga Coast (Philippine Sea)',
+    alertDetails: {
+      notes: 'Epicenter determined outside primary monitored perimeter; alerts automatically suppressed.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0422-0097',
+    timePHT: 'Apr 22, 2025 07:41 PM',
+    date: '2025-04-22',
+    location: 'Sarangani Island, Sarangani',
+    magnitude: 5.0,
+    depthKm: 40,
+    province: 'Sarangani',
+    municipality: 'Alabel',
+    provinceMunicipality: 'Sarangani Alabel',
+    aor: 'Outside AOR',
+    aorStatus: 'Outside',
+    status: 'Outside AOR',
+    coordinates: { lat: 5.4120, lng: 125.4210 },
+    isRecent24h: true,
+    intensity: 'PEIS IV - Moderately Strong',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'None (Outside Perimeter)',
+    matchedAORFull: 'Outside All AORs',
+    nearestStation: 'CGP (Cotabato Seismic Station)',
+    distanceToBoundaryKm: 78.4,
+    epicenterZone: 'Celebes Sea Basin',
+    outsideReason: 'Maritime deep sea coordinate past southern territorial AOR baseline',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'South of Sarangani Island (Celebes Sea)',
+    alertDetails: {
+      notes: 'Maritime boundary check completed. Outside jurisdiction of local station dispatch.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0422-0089',
+    timePHT: 'Apr 22, 2025 01:15 PM',
+    date: '2025-04-22',
+    location: 'Burgos, Surigao del Norte',
+    magnitude: 4.5,
+    depthKm: 26,
+    province: 'Surigao del Norte',
+    municipality: 'Burgos',
+    provinceMunicipality: 'Surigao del Norte Burgos',
+    aor: 'Outside AOR',
+    aorStatus: 'Outside',
+    status: 'Outside AOR',
+    coordinates: { lat: 10.1420, lng: 126.3120 },
+    isRecent24h: true,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'None (Outside Perimeter)',
+    matchedAORFull: 'Outside All AORs',
+    nearestStation: 'BIP (Bicol Seismic Station)',
+    distanceToBoundaryKm: 32.1,
+    epicenterZone: 'Siargao Outer Trench',
+    outsideReason: 'Offshore oceanic shelf located 32.1 km outside BIP southeastern boundary',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'East of Siargao Island (Philippine Sea)',
+    alertDetails: {
+      notes: 'Boundary buffer check confirmed outside monitored perimeter.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0421-0062',
+    timePHT: 'Apr 21, 2025 02:44 PM',
+    date: '2025-04-21',
+    location: 'Itbayat, Batanes',
+    magnitude: 4.9,
+    depthKm: 18,
+    province: 'Batanes',
+    municipality: 'Itbayat',
+    provinceMunicipality: 'Batanes Itbayat',
+    aor: 'Outside AOR',
+    aorStatus: 'Outside',
+    status: 'Outside AOR',
+    coordinates: { lat: 21.0540, lng: 121.7820 },
+    isRecent24h: true,
+    intensity: 'PEIS IV - Moderately Strong',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'None (Outside Perimeter)',
+    matchedAORFull: 'Outside All AORs',
+    nearestStation: 'PCP (Palayan Seismic Station)',
+    distanceToBoundaryKm: 135.6,
+    epicenterZone: 'Luzon Strait / Bashi Channel',
+    outsideReason: 'Far-north maritime boundary beyond PCP northern polygon extent',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'Northwest of Itbayat (Bashi Channel)',
+    alertDetails: {
+      notes: 'Regional international waterway event. No automated local dispatch required.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0421-0051',
+    timePHT: 'Apr 21, 2025 10:19 AM',
+    date: '2025-04-21',
+    location: 'Agno, Pangasinan',
+    magnitude: 4.2,
+    depthKm: 35,
+    province: 'Pangasinan',
+    municipality: 'Agno',
+    provinceMunicipality: 'Pangasinan Agno',
+    aor: 'Outside AOR',
+    aorStatus: 'Outside',
+    status: 'Outside AOR',
+    coordinates: { lat: 16.0820, lng: 119.2410 },
+    isRecent24h: true,
+    intensity: 'PEIS II - Slightly Felt',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'None (Outside Perimeter)',
+    matchedAORFull: 'Outside All AORs',
+    nearestStation: 'PCP (Palayan Seismic Station)',
+    distanceToBoundaryKm: 61.4,
+    epicenterZone: 'Manila Trench Offshore',
+    outsideReason: 'Deep trench coordinate 61.4 km west of PCP western Luzon boundary',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'West of Pangasinan Coast (West Philippine Sea)',
+    alertDetails: {
+      notes: 'West Philippine Sea offshore event outside land-based station alert sector.',
+    },
+  },
+  {
+    id: 'PHIVOLCS-2025-0420-0034',
+    timePHT: 'Apr 20, 2025 05:12 PM',
+    date: '2025-04-20',
+    location: 'Baras, Catanduanes',
+    magnitude: 4.6,
+    depthKm: 42,
+    province: 'Catanduanes',
+    municipality: 'Baras',
+    provinceMunicipality: 'Catanduanes Baras',
+    aor: 'Outside AOR',
+    aorStatus: 'Outside',
+    status: 'Outside AOR',
+    coordinates: { lat: 13.7120, lng: 124.7890 },
+    isRecent24h: false,
+    intensity: 'PEIS III - Weak',
+    source: 'PHIVOLCS EQInfo',
+    stationName: 'None (Outside Perimeter)',
+    matchedAORFull: 'Outside All AORs',
+    nearestStation: 'BIP (Bicol Seismic Station)',
+    distanceToBoundaryKm: 58.2,
+    epicenterZone: 'East Catanduanes Oceanic Basin',
+    outsideReason: 'Located 58.2 km east beyond BIP oceanic boundary buffer',
+    datasetVersion: 'v2025.04.01',
+    coordinateLocation: 'East of Baras (Philippine Sea)',
+    alertDetails: {
+      notes: 'Oceanic event recorded for seismic cataloging. Alert suppressed.',
+    },
+  },
+];
+
+function buildFullEarthquakeDataset(baseRecords: EarthquakeRecord[]): EarthquakeRecord[] {
+  const result: EarthquakeRecord[] = [...baseRecords];
+
+  const insideLocations: {
+    aor: 'PCP' | 'BIP' | 'CGP';
+    province: string;
+    municipality: string;
+    location: string;
+    lat: number;
+    lng: number;
+    stationName: string;
+    matchedAORFull: string;
+    recipientName: string;
+    recipientRole: string;
+  }[] = [
+    // PCP (Luzon)
+    { aor: 'PCP', province: 'Cagayan', municipality: 'Aparri', location: 'Aparri, Cagayan', lat: 18.356, lng: 121.642, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Cagayan', municipality: 'Gonzaga', location: 'Gonzaga, Cagayan', lat: 18.261, lng: 121.992, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Cagayan', municipality: 'Santa Ana', location: 'Santa Ana, Cagayan', lat: 18.471, lng: 122.148, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Cagayan', municipality: 'Lal-lo', location: 'Lal-lo, Cagayan', lat: 18.196, lng: 121.661, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Ilocos Norte', municipality: 'Pagudpud', location: 'Pagudpud, Ilocos Norte', lat: 18.591, lng: 120.785, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Ilocos Norte', municipality: 'Pasuquin', location: 'Pasuquin, Ilocos Norte', lat: 18.334, lng: 120.618, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Ilocos Norte', municipality: 'Burgos', location: 'Burgos, Ilocos Norte', lat: 18.513, lng: 120.648, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Ilocos Sur', municipality: 'Candon', location: 'Candon, Ilocos Sur', lat: 17.193, lng: 120.449, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Ilocos Sur', municipality: 'Santa Maria', location: 'Santa Maria, Ilocos Sur', lat: 17.367, lng: 120.483, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Isabela', municipality: 'Ilagan', location: 'Ilagan, Isabela', lat: 17.148, lng: 121.884, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Isabela', municipality: 'Palanan', location: 'Palanan, Isabela', lat: 17.062, lng: 122.428, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Isabela', municipality: 'Divilacan', location: 'Divilacan, Isabela', lat: 17.348, lng: 122.298, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Nueva Ecija', municipality: 'Bongabon', location: 'Bongabon, Nueva Ecija', lat: 15.632, lng: 121.144, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Nueva Ecija', municipality: 'Rizal', location: 'Rizal, Nueva Ecija', lat: 15.711, lng: 121.127, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Nueva Ecija', municipality: 'Pantabangan', location: 'Pantabangan, Nueva Ecija', lat: 15.821, lng: 121.152, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Aurora', municipality: 'Baler', location: 'Baler, Aurora', lat: 15.759, lng: 121.562, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Aurora', municipality: 'Casiguran', location: 'Casiguran, Aurora', lat: 16.282, lng: 122.124, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Aurora', municipality: 'Dipaculao', location: 'Dipaculao, Aurora', lat: 15.987, lng: 121.628, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Pangasinan', municipality: 'Bolinao', location: 'Bolinao, Pangasinan', lat: 16.386, lng: 119.892, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Pangasinan', municipality: 'Alaminos', location: 'Alaminos, Pangasinan', lat: 16.156, lng: 119.981, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Zambales', municipality: 'Iba', location: 'Iba, Zambales', lat: 15.328, lng: 119.979, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Zambales', municipality: 'Subic', location: 'Subic, Zambales', lat: 14.878, lng: 120.231, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Batangas', municipality: 'Calaca', location: 'Calaca, Batangas', lat: 13.931, lng: 120.812, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+    { aor: 'PCP', province: 'Batangas', municipality: 'Mabini', location: 'Mabini, Batangas', lat: 13.748, lng: 120.938, stationName: 'Palayan Seismic Station', matchedAORFull: 'PCP (Palayan Seismic Station)', recipientName: 'Wilmer A. Legaspi', recipientRole: '(PCP Station Personnel)' },
+
+    // BIP (Visayas & Bicol)
+    { aor: 'BIP', province: 'Albay', municipality: 'Legazpi City', location: 'Legazpi City, Albay', lat: 13.139, lng: 123.743, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Albay', municipality: 'Tabaco City', location: 'Tabaco City, Albay', lat: 13.359, lng: 123.731, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Albay', municipality: 'Guinobatan', location: 'Guinobatan, Albay', lat: 13.192, lng: 123.597, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Camarines Sur', municipality: 'Naga City', location: 'Naga City, Camarines Sur', lat: 13.621, lng: 123.194, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Camarines Sur', municipality: 'Ragay', location: 'Ragay, Camarines Sur', lat: 13.818, lng: 122.788, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Sorsogon', municipality: 'Irosin', location: 'Irosin, Sorsogon', lat: 12.705, lng: 124.032, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Sorsogon', municipality: 'Bulan', location: 'Bulan, Sorsogon', lat: 12.668, lng: 123.876, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Sorsogon', municipality: 'Matnog', location: 'Matnog, Sorsogon', lat: 12.585, lng: 124.086, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Masbate', municipality: 'Masbate City', location: 'Masbate City, Masbate', lat: 12.371, lng: 123.633, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Masbate', municipality: 'Aroroy', location: 'Aroroy, Masbate', lat: 12.511, lng: 123.402, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Leyte', municipality: 'Tacloban City', location: 'Tacloban City, Leyte', lat: 11.243, lng: 125.003, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Leyte', municipality: 'Ormoc City', location: 'Ormoc City, Leyte', lat: 11.006, lng: 124.607, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Leyte', municipality: 'Kananga', location: 'Kananga, Leyte', lat: 11.185, lng: 124.561, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Southern Leyte', municipality: 'Saint Bernard', location: 'Saint Bernard, Southern Leyte', lat: 10.321, lng: 125.132, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Southern Leyte', municipality: 'Sogod', location: 'Sogod, Southern Leyte', lat: 10.386, lng: 124.981, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Eastern Samar', municipality: 'Guiuan', location: 'Guiuan, Eastern Samar', lat: 11.031, lng: 125.724, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Eastern Samar', municipality: 'Borongan City', location: 'Borongan City, Eastern Samar', lat: 11.608, lng: 125.432, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Northern Samar', municipality: 'Catarman', location: 'Catarman, Northern Samar', lat: 12.498, lng: 124.637, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Northern Samar', municipality: 'Palapag', location: 'Palapag, Northern Samar', lat: 12.551, lng: 125.114, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Director Grace Tan', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Bohol', municipality: 'Tagbilaran City', location: 'Tagbilaran City, Bohol', lat: 9.672, lng: 123.873, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+    { aor: 'BIP', province: 'Bohol', municipality: 'Carmen', location: 'Carmen, Bohol', lat: 9.821, lng: 124.195, stationName: 'Bicol Seismic Station', matchedAORFull: 'BIP (Bicol Seismic Station)', recipientName: 'Engr. Vicente Ramos', recipientRole: '(BIP Station Personnel)' },
+
+    // CGP (Mindanao)
+    { aor: 'CGP', province: 'Surigao del Sur', municipality: 'Bislig City', location: 'Bislig City, Surigao del Sur', lat: 8.214, lng: 126.315, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Surigao del Sur', municipality: 'Lianga', location: 'Lianga, Surigao del Sur', lat: 8.632, lng: 126.096, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Surigao del Sur', municipality: 'Barobo', location: 'Barobo, Surigao del Sur', lat: 8.537, lng: 126.121, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Surigao del Norte', municipality: 'Surigao City', location: 'Surigao City, Surigao del Norte', lat: 9.789, lng: 125.495, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Surigao del Norte', municipality: 'Dapa', location: 'Dapa, Surigao del Norte', lat: 9.757, lng: 126.052, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Davao Oriental', municipality: 'Governor Generoso', location: 'Governor Generoso, Davao Oriental', lat: 6.578, lng: 126.071, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Davao Oriental', municipality: 'Manay', location: 'Manay, Davao Oriental', lat: 7.214, lng: 126.536, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Davao Oriental', municipality: 'Caraga', location: 'Caraga, Davao Oriental', lat: 7.332, lng: 126.564, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Davao del Sur', municipality: 'Digos City', location: 'Digos City, Davao del Sur', lat: 6.751, lng: 125.356, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Davao del Sur', municipality: 'Bansalan', location: 'Bansalan, Davao del Sur', lat: 6.782, lng: 125.214, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Davao del Sur', municipality: 'Santa Cruz', location: 'Santa Cruz, Davao del Sur', lat: 6.837, lng: 125.412, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'South Cotabato', municipality: 'Koronadal City', location: 'Koronadal City, South Cotabato', lat: 6.502, lng: 124.845, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'South Cotabato', municipality: 'Polomolok', location: 'Polomolok, South Cotabato', lat: 6.221, lng: 125.068, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Sarangani', municipality: 'Glan', location: 'Glan, Sarangani', lat: 5.823, lng: 125.201, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Sarangani', municipality: 'Malapatan', location: 'Malapatan, Sarangani', lat: 5.972, lng: 125.286, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Cotabato', municipality: 'Kidapawan City', location: 'Kidapawan City, Cotabato', lat: 7.008, lng: 125.089, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Cotabato', municipality: 'Makilala', location: 'Makilala, Cotabato', lat: 6.963, lng: 125.132, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Cotabato', municipality: 'Tulunan', location: 'Tulunan, Cotabato', lat: 6.842, lng: 124.876, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Chief Insp. Manuel Torres', recipientRole: '(CGP Station Personnel)' },
+    { aor: 'CGP', province: 'Agusan del Sur', municipality: 'San Francisco', location: 'San Francisco, Agusan del Sur', lat: 8.508, lng: 125.979, stationName: 'Cotabato Seismic Station', matchedAORFull: 'CGP (Cotabato Seismic Station)', recipientName: 'Dr. Roland Reyes', recipientRole: '(CGP Station Personnel)' }
+  ];
+
+  const outsideLocations: {
+    province: string;
+    municipality: string;
+    location: string;
+    lat: number;
+    lng: number;
+    nearestStation: string;
+    distanceToBoundaryKm: number;
+    epicenterZone: string;
+    outsideReason: string;
+  }[] = [
+    { province: 'Davao Oriental', municipality: 'Baganga', location: 'Philippine Trench (East of Baganga)', lat: 7.621, lng: 126.892, nearestStation: 'CGP (Cotabato Seismic Station)', distanceToBoundaryKm: 48.5, epicenterZone: 'Philippine Trench', outsideReason: 'Deep oceanic trench 48.5 km beyond CGP boundary perimeter' },
+    { province: 'Sarangani', municipality: 'Glan', location: 'Celebes Sea Basin (South of Balut)', lat: 5.112, lng: 125.568, nearestStation: 'CGP (Cotabato Seismic Station)', distanceToBoundaryKm: 76.2, epicenterZone: 'Celebes Sea Basin', outsideReason: 'Maritime coordinate beyond southern Philippine territory AOR polygon' },
+    { province: 'Surigao del Norte', municipality: 'Burgos', location: 'Siargao Outer Trench (East of Siargao)', lat: 10.231, lng: 126.541, nearestStation: 'BIP (Bicol Seismic Station)', distanceToBoundaryKm: 39.4, epicenterZone: 'Siargao Outer Trench', outsideReason: 'Located 39.4 km east of BIP oceanic monitoring perimeter' },
+    { province: 'Batanes', municipality: 'Itbayat', location: 'Luzon Strait (Bashi Channel)', lat: 21.245, lng: 121.892, nearestStation: 'PCP (Palayan Seismic Station)', distanceToBoundaryKm: 142.1, epicenterZone: 'Luzon Strait / Bashi Channel', outsideReason: 'Far-north maritime sector past PCP boundary buffer' },
+    { province: 'Pangasinan', municipality: 'Agno', location: 'Manila Trench Offshore (West of Luzon)', lat: 16.182, lng: 119.043, nearestStation: 'PCP (Palayan Seismic Station)', distanceToBoundaryKm: 75.8, epicenterZone: 'Manila Trench Offshore', outsideReason: 'Located 75.8 km west into Manila Trench beyond PCP AOR buffer' },
+    { province: 'Catanduanes', municipality: 'Baras', location: 'East Catanduanes Oceanic Basin', lat: 13.821, lng: 124.962, nearestStation: 'BIP (Bicol Seismic Station)', distanceToBoundaryKm: 63.4, epicenterZone: 'East Catanduanes Basin', outsideReason: 'Oceanic plate boundary 63.4 km east beyond BIP monitored sector' },
+    { province: 'Eastern Samar', municipality: 'Guiuan', location: 'Philippine Trench (East of Guiuan)', lat: 11.082, lng: 126.241, nearestStation: 'BIP (Bicol Seismic Station)', distanceToBoundaryKm: 52.6, epicenterZone: 'Philippine Trench', outsideReason: 'Subduction zone 52.6 km east beyond BIP territory' },
+    { province: 'Zambales', municipality: 'Iba', location: 'West Philippine Sea Trench Basin', lat: 15.214, lng: 119.231, nearestStation: 'PCP (Palayan Seismic Station)', distanceToBoundaryKm: 84.1, epicenterZone: 'West Philippine Sea Trench', outsideReason: 'High seas coordinate 84.1 km west of Zambales baseline' },
+    { province: 'Davao Occidental', municipality: 'Jose Abad Santos', location: 'East of Sarangani Bay (Philippine Sea)', lat: 5.712, lng: 126.114, nearestStation: 'CGP (Cotabato Seismic Station)', distanceToBoundaryKm: 38.3, epicenterZone: 'Davao Trench Shelf', outsideReason: 'Located 38.3 km southeast of CGP perimeter' },
+    { province: 'Ilocos Norte', municipality: 'Pasuquin', location: 'Northwest Luzon Offshore Basin', lat: 18.621, lng: 119.892, nearestStation: 'PCP (Palayan Seismic Station)', distanceToBoundaryKm: 71.3, epicenterZone: 'Northwest Luzon Offshore', outsideReason: 'Marine basin 71.3 km west of Ilocos coast' }
+  ];
+
+  // Exactly 81 inside records and 59 outside records to reach 152 total
+  // Inside: 64 'Alert Sent', 14 'For Review', 3 'Pending Alert'
+  const insideStatuses: ('Alert Sent' | 'For Review' | 'Pending Alert')[] = [];
+  for (let i = 0; i < 64; i++) insideStatuses.push('Alert Sent');
+  for (let i = 0; i < 14; i++) insideStatuses.push('For Review');
+  for (let i = 0; i < 3; i++) insideStatuses.push('Pending Alert');
+
+  let insideStatusIdx = 0;
+  let outsideLocIdx = 0;
+  let insideLocIdx = 0;
+
+  const dates = [
+    { date: '2025-04-23', label: 'Apr 23, 2025', isRecent: true },
+    { date: '2025-04-22', label: 'Apr 22, 2025', isRecent: true },
+    { date: '2025-04-21', label: 'Apr 21, 2025', isRecent: false },
+    { date: '2025-04-20', label: 'Apr 20, 2025', isRecent: false },
+    { date: '2025-04-19', label: 'Apr 19, 2025', isRecent: false },
+    { date: '2025-04-18', label: 'Apr 18, 2025', isRecent: false },
+    { date: '2025-04-17', label: 'Apr 17, 2025', isRecent: false },
+    { date: '2025-04-16', label: 'Apr 16, 2025', isRecent: false },
+  ];
+
+  let insideCount = 0;
+  let outsideCount = 0;
+
+  for (let i = 0; i < 140; i++) {
+    const isInside = insideCount < 81 && (outsideCount >= 59 || (i % 7 < 4));
+    const dateObj = dates[i % dates.length];
+    const hour = String((i * 3 + 1) % 12 || 12).padStart(2, '0');
+    const min = String((i * 17) % 60).padStart(2, '0');
+    const ampm = (i * 5) % 2 === 0 ? 'AM' : 'PM';
+    const timePHT = `${dateObj.label} ${hour}:${min} ${ampm}`;
+    const seqNum = String(100 - i).padStart(4, '0');
+    const id = `PHIVOLCS-${dateObj.date.slice(0, 4)}-${dateObj.date.slice(5, 7)}${dateObj.date.slice(8, 10)}-${seqNum}`;
+    const magnitude = Number((3.0 + ((i * 7) % 25) * 0.1).toFixed(1));
+    const depthKm = 8 + ((i * 13) % 75);
+
+    let intensity = 'PEIS III - Weak';
+    if (magnitude < 3.4) intensity = 'PEIS II - Slightly Felt';
+    else if (magnitude >= 4.5) intensity = 'PEIS IV - Moderately Strong';
+    else if (magnitude >= 5.2) intensity = 'PEIS V - Strong';
+
+    if (isInside) {
+      insideCount++;
+      const loc = insideLocations[insideLocIdx % insideLocations.length];
+      insideLocIdx++;
+      const status = insideStatuses[insideStatusIdx % insideStatuses.length];
+      insideStatusIdx++;
+
+      result.push({
+        id,
+        timePHT,
+        date: dateObj.date,
+        location: loc.location,
+        magnitude,
+        depthKm,
+        province: loc.province,
+        municipality: loc.municipality,
+        provinceMunicipality: `${loc.province} ${loc.municipality}`,
+        aor: loc.aor,
+        aorStatus: 'Inside',
+        status,
+        coordinates: {
+          lat: Number((loc.lat + (((i % 5) - 2) * 0.03)).toFixed(4)),
+          lng: Number((loc.lng + (((i % 5) - 2) * 0.03)).toFixed(4)),
+        },
+        isRecent24h: dateObj.isRecent,
+        intensity,
+        source: 'PHIVOLCS EQInfo',
+        stationName: loc.stationName,
+        matchedAORFull: loc.matchedAORFull,
+        recipientName: loc.recipientName,
+        recipientRole: loc.recipientRole,
+        deliveryStatus: status === 'Alert Sent' ? 'Success' : status === 'Pending Alert' ? 'Pending' : 'Under Review',
+        datasetVersion: 'v2025.04.01',
+        coordinateLocation: `${loc.municipality}, ${loc.province}`,
+        alertDetails: {
+          sentAt: status === 'Alert Sent' ? timePHT : undefined,
+          recipientsCount: loc.aor === 'PCP' ? 12 : loc.aor === 'BIP' ? 4 : 2,
+          deliveryRate: status === 'Alert Sent' ? '100%' : undefined,
+          notes: status === 'For Review' ? 'Polygon margin buffer flagged for verification' : undefined,
+        },
+      });
+    } else {
+      outsideCount++;
+      const loc = outsideLocations[outsideLocIdx % outsideLocations.length];
+      outsideLocIdx++;
+
+      result.push({
+        id,
+        timePHT,
+        date: dateObj.date,
+        location: loc.location,
+        magnitude,
+        depthKm,
+        province: loc.province,
+        municipality: loc.municipality,
+        provinceMunicipality: `${loc.province} ${loc.municipality}`,
+        aor: 'Outside AOR',
+        aorStatus: 'Outside',
+        status: 'Outside AOR',
+        coordinates: {
+          lat: Number((loc.lat + (((i % 5) - 2) * 0.04)).toFixed(4)),
+          lng: Number((loc.lng + (((i % 5) - 2) * 0.04)).toFixed(4)),
+        },
+        isRecent24h: dateObj.isRecent,
+        intensity,
+        source: 'PHIVOLCS EQInfo',
+        stationName: 'None (Outside Perimeter)',
+        matchedAORFull: 'Outside All AORs',
+        nearestStation: loc.nearestStation,
+        distanceToBoundaryKm: loc.distanceToBoundaryKm,
+        epicenterZone: loc.epicenterZone,
+        outsideReason: loc.outsideReason,
+        datasetVersion: 'v2025.04.01',
+        coordinateLocation: loc.location,
+        alertDetails: {
+          notes: 'Epicenter determined outside primary monitored perimeter; alert suppressed.',
+        },
+      });
+    }
+  }
+
+  return result;
+}
+
+export const INITIAL_EARTHQUAKES: EarthquakeRecord[] = buildFullEarthquakeDataset(BASE_EARTHQUAKES);
+
+export const AOR_ZONES: Record<'PCP' | 'BIP' | 'CGP', AORZoneInfo> = {
+  PCP: {
+    name: 'PCP AOR (Luzon)',
+    fullName: 'Philippine Coast & Plains (PCP)',
+    region: 'North & Central Luzon (Cagayan Valley, Ilocos, Babuyan)',
+    recipientsCount: 12,
+    color: '#3b82f6',
+    strokeColor: '#2563eb',
+    centerCoordinates: { lat: 18.25, lng: 121.5 },
+  },
+  BIP: {
+    name: 'BIP AOR (Visayas)',
+    fullName: 'Bicol & Inter-island Perimeter (BIP)',
+    region: 'Bicol Peninsula, Samar, Leyte, and Central Visayas',
+    recipientsCount: 4,
+    color: '#22c55e',
+    strokeColor: '#16a34a',
+    centerCoordinates: { lat: 12.85, lng: 123.8 },
+  },
+  CGP: {
+    name: 'CGP AOR (Mindanao)',
+    fullName: 'Cotabato & Gulf Perimeter (CGP)',
+    region: 'Davao Region, South Cotabato, and Sarangani Bay',
+    recipientsCount: 2,
+    color: '#a855f7',
+    strokeColor: '#9333ea',
+    centerCoordinates: { lat: 6.8, lng: 125.6 },
+  },
+};
+
+export const INITIAL_RECIPIENTS: Recipient[] = [
+  {
+    id: 'REC-000',
+    name: 'Glyn Bryan Ebardo',
+    email: 'ebardo.glynbryan1@gmail.com',
+    agency: 'PHIVOLCS Emergency Response Coordinator (PCP AOR)',
+    aor: 'PCP',
+    minMagnitude: 2.5,
+    status: 'Active',
+    lastAlertSent: 'Just now (Test Alert Dispatched)',
+  },
+  {
+    id: 'REC-001',
+    name: 'Engr. Danila Cruz',
+    email: 'd.cruz@r1.ocd.gov.ph',
+    agency: 'Office of Civil Defense - Region 1',
+    aor: 'PCP',
+    minMagnitude: 4.5,
+    status: 'Active',
+    lastAlertSent: 'Apr 23, 2025 08:16 AM',
+  },
+  {
+    id: 'REC-002',
+    name: 'Capt. Fernando Morales',
+    email: 'f.morales@coastguard.gov.ph',
+    agency: 'Philippine Coast Guard - North Luzon District',
+    aor: 'PCP',
+    minMagnitude: 4.5,
+    status: 'Active',
+    lastAlertSent: 'Apr 23, 2025 08:16 AM',
+  },
+  {
+    id: 'REC-003',
+    name: 'Dr. Maria Santos',
+    email: 'm.santos@drrmc.cagayan.gov.ph',
+    agency: 'PDRRMO Cagayan Operations Center',
+    aor: 'PCP',
+    minMagnitude: 4.0,
+    status: 'Active',
+    lastAlertSent: 'Apr 23, 2025 08:16 AM',
+  },
+  {
+    id: 'REC-004',
+    name: 'Lt. Col. Ramon Bautista',
+    email: 'bautista.r@5id.army.mil.ph',
+    agency: '5th Infantry Division DRU - Gamu',
+    aor: 'PCP',
+    minMagnitude: 5.0,
+    status: 'Active',
+    lastAlertSent: 'Apr 23, 2025 08:16 AM',
+  },
+  {
+    id: 'REC-005',
+    name: 'Director Grace Tan',
+    email: 'gtan@r5.ocd.gov.ph',
+    agency: 'Office of Civil Defense - Region 5 (Bicol)',
+    aor: 'BIP',
+    minMagnitude: 4.5,
+    status: 'Active',
+    lastAlertSent: 'Apr 22, 2025 03:17 PM',
+  },
+  {
+    id: 'REC-006',
+    name: 'Engr. Vicente Ramos',
+    email: 'vramos@albay.gov.ph',
+    agency: 'APSEMO Albay Public Safety',
+    aor: 'BIP',
+    minMagnitude: 4.5,
+    status: 'Active',
+    lastAlertSent: 'Apr 22, 2025 03:17 PM',
+  },
+  {
+    id: 'REC-007',
+    name: 'Col. Arturo Mendoza',
+    email: 'mendoza.a@9id.army.mil.ph',
+    agency: '9th Infantry Division Disaster Task Force',
+    aor: 'BIP',
+    minMagnitude: 4.0,
+    status: 'Active',
+    lastAlertSent: 'Apr 22, 2025 03:17 PM',
+  },
+  {
+    id: 'REC-008',
+    name: 'Major Leo Castillo',
+    email: 'castillo.l@pnp.gov.ph',
+    agency: 'Police Regional Office 5 (PRO-5)',
+    aor: 'BIP',
+    minMagnitude: 4.5,
+    status: 'Active',
+    lastAlertSent: 'Apr 22, 2025 03:17 PM',
+  },
+  {
+    id: 'REC-009',
+    name: 'Director Roland Reyes',
+    email: 'rreyes@r11.ocd.gov.ph',
+    agency: 'Office of Civil Defense - Region 11',
+    aor: 'CGP',
+    minMagnitude: 4.5,
+    status: 'Active',
+    lastAlertSent: 'Apr 22, 2025 11:20 PM',
+  },
+  {
+    id: 'REC-010',
+    name: 'Chief Insp. Manuel Torres',
+    email: 'cdrrmo@davaocity.gov.ph',
+    agency: 'Davao City Central 911 / CDRRMO',
+    aor: 'CGP',
+    minMagnitude: 4.0,
+    status: 'Active',
+    lastAlertSent: 'Apr 22, 2025 11:20 PM',
+  },
+];
+
+export const INITIAL_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: 'LOG-8812',
+    timestamp: '2025-04-23 08:16:04 PST',
+    eventType: 'ALERT_DISPATCH',
+    description: 'Email Bulletin dispatched for PHIVOLCS-2025-0423-0013',
+    details: 'M4.8 Calayan event routed to 12 recipients in PCP AOR. 100% relay delivery.',
+    actor: 'Worker-Relay-01 (Automated)',
+    status: 'SUCCESS',
+  },
+  {
+    id: 'LOG-8811',
+    timestamp: '2025-04-23 08:14:15 PST',
+    eventType: 'AOR_CHECK',
+    description: 'AOR Geofence point-in-polygon evaluation',
+    details: 'Coords 19.10°N, 121.25°E evaluated against PCP boundaries. Result: Inside AOR.',
+    actor: 'GIS-Worker-Core',
+    status: 'SUCCESS',
+  },
+  {
+    id: 'LOG-8810',
+    timestamp: '2025-04-23 08:14:02 PST',
+    eventType: 'PHIVOLCS_SYNC',
+    description: 'Real-time seismic bulletin ingested from EQInfo feed',
+    details: 'Bulletin ingested with magnitude 4.8, depth 10km, located at Dalupiri Island, Calayan, Cagayan.',
+    actor: 'IngestService-Daemon',
+    status: 'SUCCESS',
+  },
+  {
+    id: 'LOG-8809',
+    timestamp: '2025-04-22 11:03:18 PST',
+    eventType: 'EXCEPTION_REVIEW',
+    description: 'Event flagged for operator review: PHIVOLCS-2025-0423-0011',
+    details: 'M5.1 Burgos flagged due to sub-fault alignment buffer check.',
+    actor: 'BoundaryRuleEngine',
+    status: 'FLAGGED',
+  },
+];

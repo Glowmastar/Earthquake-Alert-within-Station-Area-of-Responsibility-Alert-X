@@ -1,0 +1,6 @@
+{
+  "name": "Alert X - Earthquake AOR Monitoring",
+  "description": "Earthquake AOR Monitoring and Email Alert System with real-time PHIVOLCS EQInfo integration, GIS boundary tracking, and automated alert dispatches.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
