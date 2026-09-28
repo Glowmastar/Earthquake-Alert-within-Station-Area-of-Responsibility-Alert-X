@@ -5,6 +5,7 @@ node_modules
 .git
 build
 dist
+server.js
 *.zip
 test-results
 _review_zip

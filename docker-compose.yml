@@ -31,6 +31,7 @@ services:
       db: {condition: service_healthy}
   api:
     <<: *app
+    command: ["node", "build/server/index.js"]
     ports: ["127.0.0.1:3000:4000"]
     depends_on:
       migrate: {condition: service_completed_successfully}

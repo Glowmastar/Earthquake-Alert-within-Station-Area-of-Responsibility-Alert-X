@@ -30,6 +30,7 @@ import { SettingsView } from './views/SettingsView';
 import { AORRulesView } from './views/AORRulesView';
 import { RolesView } from './views/RolesView';
 import { LoginView } from './views/LoginView';
+import { EmailDesignTemplateView } from './views/EmailDesignTemplateView';
 
 import { INITIAL_EARTHQUAKES, INITIAL_RECIPIENTS } from './data/mockData';
 import { EarthquakeRecord, Recipient, UserProfile, PRECONFIGURED_USERS } from './types';
@@ -40,6 +41,9 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (parsed?.email === 'j.delacruz@phivolcs.dost.gov.ph') {
+          return PRECONFIGURED_USERS['j.delacruz@phivolcs.dost.gov.ph'];
+        }
         if (parsed?.email === 'palayanz@phivolcs.dost.gov.ph') {
           return PRECONFIGURED_USERS['palayanz@phivolcs.dost.gov.ph'];
         }
@@ -48,14 +52,14 @@ export default function App() {
         // ignore
       }
     }
-    // Default to the requested Palayan Seismic Station account
-    return PRECONFIGURED_USERS['palayanz@phivolcs.dost.gov.ph'];
+    // Default to Administrator Juan Dela Cruz as in screenshot
+    return PRECONFIGURED_USERS['j.delacruz@phivolcs.dost.gov.ph'] || PRECONFIGURED_USERS['palayanz@phivolcs.dost.gov.ph'];
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('alertx_auth') !== 'false';
   });
-  const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [currentView, setCurrentView] = useState<string>('email');
   const [recordFilter, setRecordFilter] = useState<string>('INSIDE_AOR');
   const [mapSubView, setMapSubView] = useState<'STATION_BOUNDARIES' | 'BOUNDARY_REVIEW'>('BOUNDARY_REVIEW');
   const [settingsSubView, setSettingsSubView] = useState<'AOR_RULES' | 'EQINFO_SOURCE' | 'ROLES'>('ROLES');
@@ -67,6 +71,41 @@ export default function App() {
   const [selectedEarthquake, setSelectedEarthquake] = useState<EarthquakeRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(() => {
+    return localStorage.getItem('alertx_sidebar_hidden') === 'true';
+  });
+
+  // Global Keyboard Shortcut: Ctrl+B or Cmd+B to toggle sidebar visibility
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        if (window.innerWidth < 1024) {
+          setIsMobileSidebarOpen((prev) => !prev);
+        } else {
+          setIsSidebarHidden((prev) => {
+            const next = !prev;
+            localStorage.setItem('alertx_sidebar_hidden', String(next));
+            return next;
+          });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleToggleSidebar = () => {
+    if (window.innerWidth < 1024) {
+      setIsMobileSidebarOpen((prev) => !prev);
+    } else {
+      setIsSidebarHidden((prev) => {
+        const next = !prev;
+        localStorage.setItem('alertx_sidebar_hidden', String(next));
+        return next;
+      });
+    }
+  };
 
   // Scoped Earthquakes: When logged in as Palayan Seismic Station (PCP), ONLY display AOR within PCP!
   const scopedEarthquakes = useMemo(() => {
@@ -318,6 +357,14 @@ export default function App() {
           titleClassName: 'text-2xl font-black text-blue-600 tracking-tight leading-tight',
           subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
         };
+      case 'email':
+        return {
+          title: 'Email Design Template',
+          subtitle: 'Create and manage branded earthquake alert email layouts',
+          breadcrumb: 'Email / Design Template',
+          titleClassName: 'text-2xl font-black text-blue-600 tracking-tight leading-tight',
+          subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
+        };
       case 'settings':
         if (settingsSubView === 'ROLES') {
           return {
@@ -445,10 +492,12 @@ export default function App() {
         currentUser={currentUser}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        isHidden={isSidebarHidden}
+        onToggleHide={handleToggleSidebar}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden w-full min-w-0">
+      <div className="flex-1 flex flex-col h-full overflow-hidden w-full min-w-0 transition-all">
         {/* Top Header */}
         <Header
           title={headerInfo.title}
@@ -461,6 +510,8 @@ export default function App() {
           titleClassName={headerInfo.titleClassName}
           subtitleClassName={headerInfo.subtitleClassName}
           currentUser={currentUser}
+          isSidebarHidden={isSidebarHidden}
+          onToggleSidebar={handleToggleSidebar}
           onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
           onLogout={() => {
             setIsAuthenticated(false);
@@ -590,6 +641,14 @@ export default function App() {
             <RecipientsView
               recipients={scopedRecipients}
               onAddRecipient={handleAddRecipient}
+            />
+          )}
+
+          {currentView === 'email' && (
+            <EmailDesignTemplateView
+              currentUser={currentUser}
+              onNavigateToAudit={() => navigateTo('audit')}
+              earthquakes={scopedEarthquakes}
             />
           )}
 

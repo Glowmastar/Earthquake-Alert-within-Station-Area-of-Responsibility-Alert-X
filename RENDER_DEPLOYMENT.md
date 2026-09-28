@@ -1,179 +1,143 @@
-# Deploy Alert X to Render
+# Redeploy the current Alert X website on Render
 
-This runbook applies the generic Render workflow to Alert X without changing its application architecture. Alert X is a full-stack web service with a separate background worker and a PostgreSQL/PostGIS database. It is not a Render Static Site.
+This guide applies to the current `src/App.tsx` + root `server.ts` website.
+Render builds the React assets and a JavaScript server, then runs `node server.js`
+from the Docker image. The Express server serves both the website and its
+`/api/time`, `/api/phivolcs-earthquakes`, and `/api/phivolcs-status` endpoints.
+Use a **Web Service**, not a Static Site.
 
-## Deployment topology
+The current website uses demo/browser-side sign-in, local UI state, and simulated
+email dispatch. Deployment does not enable durable recipient/settings storage,
+server-enforced authorization, or real email delivery. The separate database API
+in `server/src` is retained in the repository and tested, but is not the entry
+point of this Render website. The older database deployment guide in
+`DEPLOYMENT.md` describes that separate stack.
 
-The repository-level `render.yaml` creates these same-region resources in Singapore:
+## Files to push
 
-- `alertx-api`, a public Docker web service that serves the React client and Express API;
-- `alertx-worker`, a private Docker background worker for ingestion, evaluation, delivery, and cleanup;
-- `alertx-db`, a private Render Postgres 16 database.
+Push the complete current application source, not only `render.yaml`. In
+particular, root `server.ts`, the new views/components/data files under `src`,
+`package.json`, `package-lock.json`, `Dockerfile`, `render.yaml`,
+`scripts/validate-render.mjs`, `scripts/smoke-web.mjs`, and
+`.github/workflows/check.yml` must be included. Also include the updated
+`.gitignore`, `.dockerignore`, this guide, and `docker-compose.yml` (which retains
+an explicit entry point for the separate local database API).
 
-Both services run the checksummed migration command before deployment. The migration code uses a PostgreSQL advisory lock, so simultaneous API and worker deploys serialize safely and the second migration pass is a no-op.
+Do not commit `.env`, `node_modules`, `dist`, or generated `server.js`. Docker
+creates the build outputs. npm and `package-lock.json` are the deployment
+package manager and lockfile; `bun.lock` is not used by these build commands.
 
-The Blueprint selects paid baseline resources because the worker cannot use Render's free web-service tier and this application is intended for operational use. Review the selected plans, database disk size, region, backup retention, and expected charges before creating the Blueprint.
+Before committing, review `git status --short` and the changes in GitHub Desktop
+or your editor. The current folder contains pre-existing modified and untracked
+application files. Include the intended website files; do not commit private
+operational data merely because it appears as untracked.
 
-## 1. Complete local release checks
+Local verification on Node 24:
 
-Run:
-
-```sh
+```powershell
 npm ci
 npm run check:render
+npm run check
 npm run build
+npm run test:web
 npm test
 npm run test:integration
-docker compose build
 ```
 
-Do not deploy a commit unless these checks pass. The Blueprint check validates YAML, Render's published JSON schema, cross-resource references, and Alert X's deployment safety policy. The GitHub workflow also builds the production container and runs the unit and PostGIS integration tests. The Blueprint uses `autoDeployTrigger: checksPass` so commits deploy only after linked CI checks pass. Render performs the final account-aware validation when the Blueprint is created or synchronized.
+`test:web` starts a temporary production server, verifies the health endpoint,
+HTML, JavaScript asset, SPA route, and time API, and then stops it. It sends no
+alerts and does not contact PHIVOLCS. The backend integration tests use an
+isolated portable database unless `TEST_DATABASE_URL` is provided.
 
-## 2. Prepare external services
+Commit the reviewed changes and push them to **main** in:
+https://github.com/Glowmastar/Earthquake-Alert-within-Station-Area-of-Responsibility-Alert-X
 
-Create a private S3-compatible bucket for immutable PHIVOLCS source archives. Enable versioning and retention outside Alert X. Give the application credentials access only to the required archive prefix.
+## Redeploy an existing Blueprint
 
-Prepare an approved SMTP provider, but do not add live delivery credentials or enable delivery yet. If organizational sign-in is required, register the final HTTPS callback URL before enabling OIDC:
+1. Open the Render Dashboard and select the **existing Blueprint** linked to
+   this repository. Reuse it instead of creating a second Blueprint for the
+   same resources.
+2. Confirm the repository, branch **main**, and Blueprint path **render.yaml**.
+3. Enable **Auto Sync**, or click **Manual Sync** after pushing these changes.
+4. Inspect the proposed update to **alertx-api**. It remains a Docker Web
+   Service in Singapore, using the existing paid `0.5c-512mb` plan. The Docker
+   Command becomes **node server.js**. The health-check path is **/api/health**.
+5. Check the service Settings after syncing. The **Pre-Deploy Command must be
+   empty**. Remove any old `node build/server/migrate.js` hook if it remains.
+6. Wait for GitHub's **Check Alert X** workflow to pass. Auto Deploy is **After
+   CI Checks Pass**, so a failed or pending GitHub workflow prevents automatic
+   deployment. Use **Manual Deploy → Deploy latest commit** if an initial
+   deployment is needed after the checks pass.
+7. Watch the Render logs for `Server running at http://0.0.0.0:10000`, then open
+   the service's displayed `https://...onrender.com` URL.
 
-```text
-https://YOUR-APP-ORIGIN/api/auth/oidc/callback
-```
+The Blueprint no longer defines `alertx-worker` or `alertx-db` because this
+website does not use them. Render does **not** delete resources removed from a
+Blueprint. They can continue running and billing separately. Review any old
+worker and suspend it if the old ingestion/delivery workflow is no longer
+needed. Preserve the old database and its backups until you decide what data
+you need; no database deletion is part of this change.
 
-## 3. Create the Render Blueprint
+## If the old service was created manually
 
-Push the repository to a private Git provider repository, then create a Render Blueprint from `render.yaml`.
+Pushing `render.yaml` does not automatically apply it to a manually configured
+service. For an existing **Docker Web Service**, open Settings and use:
 
-Review the resource names and region before confirming. The Blueprint blocks public database access with an empty `ipAllowList`; the API and worker use the database's same-region private connection string.
+| Setting | Value |
+|---|---|
+| Repository | The GitHub repository above |
+| Branch | `main` |
+| Root Directory | Empty (repository root) |
+| Dockerfile Path | `./Dockerfile` |
+| Docker Build Context | `.` |
+| Docker Command | `node server.js` |
+| Pre-Deploy Command | Empty |
+| Health Check Path | `/api/health` |
+| Auto Deploy | After CI Checks Pass |
 
-Render prompts for these secret or deployment-specific values on the API service:
+Set `NODE_ENV=production` and `PORT=10000` in Environment, then deploy the latest
+commit. There is no separate Build Command or Start Command for this Docker
+configuration; the Dockerfile supplies the build steps.
 
-```text
-APP_ORIGIN
-S3_BUCKET
-S3_ENDPOINT
-S3_ACCESS_KEY_ID
-S3_SECRET_ACCESS_KEY
-```
+If creating a replacement service, choose **New → Blueprint**, connect the
+repository, select **main**, and use **render.yaml**. Review the plan and
+resource preview before deploying. Do not create a duplicate Blueprint when
+your existing one can be synced. If the existing service has a different name
+from `alertx-api`, update the YAML name to match before attempting to manage it
+with this Blueprint, or intentionally create a separate replacement service.
 
-The worker receives these values through Blueprint service references, so there is one source of truth and no second secret entry. `APP_ORIGIN` must be the exact public HTTPS origin with no path or trailing slash, for example `https://alertx.example.gov.ph`. For AWS S3, use the applicable regional endpoint and set `S3_FORCE_PATH_STYLE=false` on both services after Blueprint creation if required by the provider.
+## Environment and files on Render
 
-If the generated `onrender.com` address is the initial public address, verify the actual API service URL immediately after Blueprint creation and correct `APP_ORIGIN` before testing authentication. When adding a custom domain later, update `APP_ORIGIN` to that domain and redeploy the API and worker together.
+You do not upload source files individually to Render. Render clones the
+selected GitHub commit and builds the Docker image.
 
-For organizational sign-in, add `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` to the API service only. For licensed basemap tiles, add `VITE_TILE_URL` and `VITE_TILE_ATTRIBUTION` to the API service before a deploy; these client settings are compiled into the browser bundle and therefore require a rebuild. Leave optional variables absent instead of saving empty placeholder values.
+Only `NODE_ENV=production` and `PORT=10000` are required for this website. No
+Postgres connection, S3 bucket, SMTP credentials, Gemini key, or Firebase setup
+is required by the active entry point. Existing unused variables can remain;
+do not copy secrets into GitHub. Render provides the public HTTPS URL.
 
-The Blueprint uses `DB_SSL=false` because `DATABASE_URL` is Render's private same-region connection. If the database is moved outside Render, switch to `DB_SSL=true` and provide a trusted CA through `DB_CA_FILE`.
+## Verify and troubleshoot
 
-## 4. First deployment
+- Open `/api/health`: expect JSON `{"status":"ok"}`.
+- Open `/api/time`: expect JSON with `success: true` and Asia/Manila time.
+- Open `/`: verify the website and navigation load.
+- Open `/api/phivolcs-earthquakes`: a successful upstream request returns records;
+  an upstream failure may return 502. This is separate from website health.
+- If logs still mention `build/server/index.js`, PostgreSQL, or migrations,
+  the service is still using an old Docker Command or Pre-Deploy Command.
+- If `npm ci` rejects the lockfile, ensure both package files from this change
+  were committed together. Do not work around it by deleting the lockfile.
+- If automatic deploy does not begin, inspect GitHub Actions and Render Events.
+  Confirm Render's GitHub app can access the repository and the linked branch
+  is `main`.
+- If a cached build appears stale after updating settings, use Render's
+  **Clear build cache & deploy** action.
 
-The API and worker begin with these safety switches:
+The Blueprint retains the existing paid compute plan. If you choose a free
+instance in Render, update the Blueprint plan too so future syncs do not restore
+the paid plan; review free-service limits before making that choice.
 
-```text
-INGESTION_ENABLED=false
-DELIVERY_ENABLED=false
-```
-
-The migration command creates PostGIS and pgcrypto and applies every migration before either service starts. If extension creation or a migration fails, stop and resolve the database issue; do not bypass the pre-deploy command.
-
-After both services deploy, open an API service shell and run:
-
-```sh
-node build/server/verify-deployment.js
-```
-
-The command verifies PostGIS, pgcrypto, and every migration checksum without changing the database.
-
-## 5. Bootstrap the administrator
-
-Temporarily add these environment variables to the API service only:
-
-```text
-INITIAL_ADMIN_EMAIL
-INITIAL_ADMIN_NAME
-INITIAL_ADMIN_PASSWORD
-```
-
-Use a unique password of 14 to 72 characters. In the API shell, run exactly once:
-
-```sh
-node build/server/bootstrap.js
-```
-
-Sign in successfully, then delete `INITIAL_ADMIN_PASSWORD` from the service environment and redeploy the API. The bootstrap command refuses to overwrite an existing administrator.
-
-## 6. Staging acceptance gate
-
-Keep ingestion and delivery disabled while validating:
-
-- `/api/health/live` returns a successful response;
-- `/api/health` returns a successful response and detects database loss;
-- login, logout, session expiry, password reset, CSRF, and origin checks;
-- administrator and station-user authorization, including cross-station denial;
-- direct browser refreshes on application routes;
-- database persistence after service restart;
-- audit records for privileged actions;
-- worker startup and heartbeat;
-- graceful API and worker shutdown during deployment.
-
-After the worker has run for at least 30 seconds, execute:
-
-```sh
-node build/server/verify-deployment.js --require-worker
-```
-
-This additionally requires a current `RUNNING` worker heartbeat no more than 90 seconds old.
-
-## 7. Configure operational data
-
-In Settings, import and approve authoritative station AOR polygons, the land dataset, active AOR rules, recipients, and verification evidence. Workbook-derived province assignments remain drafts until PSGC/AOR reconciliation and approval.
-
-Do not enable ingestion until a controlled EQInfo retrieval both creates an immutable raw archive record and parses the authorized live PHIVOLCS listing correctly. A changed page layout must stop or quarantine the run rather than create guessed records.
-
-## 8. Enable controlled delivery
-
-Add SMTP settings to the worker service:
-
-```text
-SMTP_HOST
-SMTP_PORT
-SMTP_SECURE
-SMTP_USER
-SMTP_PASSWORD
-EMAIL_FROM
-```
-
-Set `DELIVERY_ENABLED=true` only for a controlled recipient test. Confirm queued, accepted, failed, and uncertain outcomes are recorded correctly. Never automatically replay an uncertain attempt because the provider might already have accepted it.
-
-After controlled testing and operational sign-off, enable delivery for the approved recipients. The API service does not need SMTP credentials.
-
-## 9. Enable ingestion
-
-Set `INGESTION_ENABLED=true` on the worker service only after archive, parser, station, AOR, and monitoring gates pass. Monitor the first source run, event revision, AOR evaluation, review decision, alert creation, and delivery lifecycle end to end.
-
-## 10. Monitoring and rollback
-
-Monitor:
-
-- `/api/health` and API error logs;
-- worker heartbeat age;
-- failed ingestion runs and quarantined rows;
-- failed and uncertain deliveries;
-- blocked event-processing records;
-- database storage, connections, backups, and restore tests;
-- S3 archive-write failures.
-
-Before each release, create and verify a database backup. To roll back application code, redeploy the last known-good image or commit. Do not reverse database migrations by editing applied migration files. Follow `UPGRADE.md` and use a tested database restore when a schema rollback is required.
-
-## Release gate
-
-Do not activate production ingestion or delivery if any of these are true:
-
-- build, unit, or integration tests fail;
-- migrations or deployment verification fail;
-- PostGIS or pgcrypto is unavailable;
-- the worker heartbeat is stale;
-- raw-source archiving fails;
-- live-source parsing has not been validated;
-- station, AOR, land-mask, or recipient data lacks approval;
-- database restore has not been tested;
-- authorization testing reveals cross-station access;
-- uncertain deliveries cannot be reconciled operationally.
+Official references:
+- [Render Blueprint configuration](https://render.com/docs/blueprint-spec)
+- [Managing and syncing existing Blueprints](https://render.com/docs/infrastructure-as-code)
+- [Deploys and CI-triggered deployment](https://render.com/docs/deploys)

@@ -14,6 +14,9 @@ import {
   IdCard,
   X,
   Radio,
+  Mail,
+  Settings as SettingsIcon,
+  PanelLeftClose,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -27,6 +30,8 @@ interface SidebarProps {
   isOpenMobile?: boolean;
   currentUser?: UserProfile;
   onCloseMobile?: () => void;
+  isHidden?: boolean;
+  onToggleHide?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -38,9 +43,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   currentUser,
   onCloseMobile,
+  isHidden = false,
+  onToggleHide,
 }) => {
   const [recordsExpanded, setRecordsExpanded] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(true);
+  const [exceptionExpanded, setExceptionExpanded] = useState(true);
+  const [emailExpanded, setEmailExpanded] = useState(true);
   const [intensityExpanded, setIntensityExpanded] = useState(true);
   const [adminExpanded, setAdminExpanded] = useState(true);
 
@@ -65,8 +74,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0a1628] text-slate-300 flex flex-col justify-between shrink-0 select-none overflow-y-auto border-r border-slate-800/80 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0a1628] text-slate-300 flex flex-col justify-between shrink-0 select-none overflow-y-auto border-r border-slate-800/80 transition-all duration-300 ease-in-out lg:static ${
           isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+        } ${
+          isHidden
+            ? 'lg:-ml-64 lg:opacity-0 lg:pointer-events-none lg:border-r-0'
+            : 'lg:ml-0 lg:opacity-100 lg:translate-x-0'
         }`}
       >
         {/* Top Brand Section */}
@@ -101,16 +114,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
 
-            {/* Close button on mobile */}
-            <button
-              type="button"
-              onClick={onCloseMobile}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 lg:hidden transition-colors"
-              title="Close sidebar"
-              aria-label="Close sidebar"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {/* Controls: Close on mobile, Hide on desktop */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 lg:hidden transition-colors"
+                title="Close sidebar"
+                aria-label="Close sidebar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {onToggleHide && (
+                <button
+                  type="button"
+                  onClick={onToggleHide}
+                  className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
+                  title="Hide sidebar (Ctrl+B)"
+                  aria-label="Hide sidebar"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Station Scope Banner (when PCP scoped) */}
@@ -204,6 +231,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   />
                   <span>All Records</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('records', 'NEW')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentFilter === 'NEW' && isRecordsView
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentFilter === 'NEW' && isRecordsView ? 'bg-white' : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>New Records</span>
                 </button>
                 <button
                   type="button"
@@ -322,30 +365,158 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {/* Exception Review */}
-          <button
-            type="button"
-            onClick={() => handleNavigate('exceptions', 'ALL')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
-              currentView === 'exceptions'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
-              <span>Exception Review</span>
-            </div>
-            {reviewCount > 0 && (
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                  currentView === 'exceptions' ? 'bg-white text-blue-600' : 'bg-red-500/80 text-white'
-                }`}
+          {/* Exception Review Dropdown */}
+          <div>
+            <div
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
+                currentView === 'exceptions'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  handleNavigate('exceptions', 'ALL');
+                  setExceptionExpanded(true);
+                }}
+                className="flex items-center gap-3 flex-1 text-left focus:outline-none"
+                title="Go to Exception Review"
               >
-                {reviewCount}
-              </span>
+                <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
+                <span>Exception Review</span>
+              </button>
+              <div className="flex items-center gap-1.5">
+                {reviewCount > 0 && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      currentView === 'exceptions' ? 'bg-white text-blue-600' : 'bg-red-500/80 text-white'
+                    }`}
+                  >
+                    {reviewCount}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExceptionExpanded(!exceptionExpanded);
+                  }}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  title={exceptionExpanded ? "Collapse section" : "Expand section"}
+                  aria-label={exceptionExpanded ? "Collapse section" : "Expand section"}
+                >
+                  {exceptionExpanded ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {exceptionExpanded && (
+              <div className="mt-1 ml-2 pl-2 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('exceptions', 'Offshore Event')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentView === 'exceptions' && currentFilter === 'Offshore Event'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentView === 'exceptions' && currentFilter === 'Offshore Event'
+                        ? 'bg-white'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>Offshore Events</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('exceptions', 'Boundary Event')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentView === 'exceptions' && currentFilter === 'Boundary Event'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentView === 'exceptions' && currentFilter === 'Boundary Event'
+                        ? 'bg-white'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>Boundary Events</span>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
+
+          {/* Email Dropdown (Matching Screenshot) */}
+          <div>
+            <div
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
+                currentView === 'email'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  handleNavigate('email', 'DESIGN_TEMPLATE');
+                  setEmailExpanded(true);
+                }}
+                className="flex items-center gap-3 flex-1 text-left focus:outline-none"
+                title="Go to Email Design Template"
+              >
+                <Mail className="w-4 h-4 shrink-0" />
+                <span>Email</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEmailExpanded(!emailExpanded);
+                }}
+                className="p-1 hover:bg-white/10 rounded transition-colors"
+                title={emailExpanded ? "Collapse section" : "Expand section"}
+                aria-label={emailExpanded ? "Collapse section" : "Expand section"}
+              >
+                {emailExpanded ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+
+            {emailExpanded && (
+              <div className="mt-1 ml-2 pl-2 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('email', 'DESIGN_TEMPLATE')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentView === 'email'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentView === 'email' ? 'bg-white' : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>Design Template</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Recipients */}
           <button
@@ -574,14 +745,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <IdCard className="w-3.5 h-3.5 shrink-0" />
                   <span>Roles</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('settings', 'GENERAL')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentView === 'settings' && currentFilter === 'GENERAL'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentView === 'settings' && currentFilter === 'GENERAL'
+                        ? 'bg-white'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>Settings</span>
+                </button>
               </div>
             )}
           </div>
         </nav>
       </div>
 
+      {/* Desktop Quick Collapse Button */}
+      {onToggleHide && (
+        <div className="hidden lg:block px-3 mb-2">
+          <button
+            type="button"
+            onClick={onToggleHide}
+            className="w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 transition-all group"
+            title="Hide sidebar (Ctrl+B)"
+          >
+            <div className="flex items-center gap-2">
+              <PanelLeftClose className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+              <span>Hide Sidebar</span>
+            </div>
+            <kbd className="text-[10px] font-mono text-slate-400 bg-slate-950/70 px-1.5 py-0.5 rounded border border-slate-700/60">
+              Ctrl+B
+            </kbd>
+          </button>
+        </div>
+      )}
+
       {/* Bottom Organic Waves & Slogan Section */}
-      <div className="relative pt-12 pb-5 px-3 text-center mt-auto">
+      <div className="relative pt-10 pb-5 px-3 text-center mt-auto">
         {/* Layered Decorative Wave SVG Background */}
         <div className="absolute inset-x-0 bottom-0 pointer-events-none opacity-60">
           <svg viewBox="0 0 250 120" className="w-full h-auto" preserveAspectRatio="none">

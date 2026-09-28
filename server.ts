@@ -261,6 +261,31 @@ function fetchPhivolcsEarthquakes(): Promise<any[]> {
 }
 
 // API Routes
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/api/time', (_req: Request, res: Response) => {
+  const now = new Date();
+  res.json({
+    success: true,
+    epochMs: now.getTime(),
+    iso: now.toISOString(),
+    timezone: 'Asia/Manila',
+    pstFormatted: new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    }).format(now),
+  });
+});
+
 app.get('/api/phivolcs-earthquakes', async (_req: Request, res: Response) => {
   const startTime = Date.now();
   try {
@@ -373,7 +398,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
+    app.get('/{*path}', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   }

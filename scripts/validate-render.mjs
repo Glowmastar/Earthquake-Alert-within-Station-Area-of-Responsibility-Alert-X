@@ -44,27 +44,12 @@ for(const service of services){
 }
 
 const api=services.find(service=>service.name==='alertx-api');
-const worker=services.find(service=>service.name==='alertx-worker');
-const database=databases.find(item=>item.name==='alertx-db');
-if(!api||api.type!=='web'||api.runtime!=='docker')fail('alertx-api must be a Docker web service');
-if(!worker||worker.type!=='worker'||worker.runtime!=='docker')fail('alertx-worker must be a Docker background worker');
-if(!database)fail('alertx-db must be defined');
-if(api.healthCheckPath!=='/api/health')fail('alertx-api must use the database-aware /api/health endpoint');
-if(api.preDeployCommand!=='node build/server/migrate.js'||worker.preDeployCommand!=='node build/server/migrate.js')fail('Both services must run the checksummed migration command before deployment');
-if(worker.dockerCommand!=='node build/server/worker.js')fail('alertx-worker must run the worker entry point');
-if(api.region!==worker.region||api.region!==database.region)fail('API, worker, and database must remain in the same Render region');
-
-const env=(service,key)=>(service.envVars||[]).find(variable=>variable.key===key);
-for(const service of [api,worker]){
- if(env(service,'INGESTION_ENABLED')?.value!=='false')fail(`${service.name} must deploy with ingestion disabled`);
- if(env(service,'DELIVERY_ENABLED')?.value!=='false')fail(`${service.name} must deploy with delivery disabled`);
- if(env(service,'RAW_ARCHIVE_BACKEND')?.value!=='S3')fail(`${service.name} must use the production S3 archive backend`);
- if(env(service,'DATABASE_URL')?.fromDatabase?.property!=='connectionString')fail(`${service.name} must use Render's private database connection string`);
-}
-
-for(const key of ['APP_ORIGIN','S3_BUCKET','S3_ENDPOINT','S3_ACCESS_KEY_ID','S3_SECRET_ACCESS_KEY']){
- if(env(api,key)?.sync!==false)fail(`alertx-api.${key} must be entered securely during Blueprint creation`);
- if(env(worker,key)?.fromService?.name!=='alertx-api'||env(worker,key)?.fromService?.envVarKey!==key)fail(`alertx-worker.${key} must reference the API service's value`);
-}
-
-console.log('render.yaml passed YAML, Render schema, reference, and Alert X deployment-policy validation');
+if(services.length!==1||!api||api.type!=='web'||api.runtime!=='docker')fail('The current website must use one Docker web service named alertx-api');
+if(databases.length)fail('The current website does not use a Render database');
+if(api.dockerCommand!=='node server.js')fail('The website must run the compiled root server');
+if(api.preDeployCommand)fail('The website must not run database migrations');
+if(api.healthCheckPath!=='/api/health')fail('The website must use /api/health');
+if(api.branch!=='main'||api.autoDeployTrigger!=='checksPass')fail('Deploy main only after GitHub checks pass');
+const env=key=>(api.envVars||[]).find(variable=>variable.key===key)?.value;
+if(env('NODE_ENV')!=='production'||env('PORT')!=='10000')fail('Production mode and port 10000 are required');
+console.log('render.yaml passed YAML, Render schema, reference, and current-website deployment validation');

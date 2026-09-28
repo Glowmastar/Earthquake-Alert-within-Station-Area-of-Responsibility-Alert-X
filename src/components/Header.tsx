@@ -1,6 +1,23 @@
 import React, { useState } from 'react';
-import { Home, Bell, ChevronDown, CheckCircle2, ShieldCheck, Menu, LogOut, MapPin, Radio } from 'lucide-react';
+import {
+  Home,
+  Bell,
+  ChevronDown,
+  CheckCircle2,
+  ShieldCheck,
+  Menu,
+  LogOut,
+  MapPin,
+  Radio,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelLeft,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+} from 'lucide-react';
 import { UserProfile } from '../types';
+import { useRealtimeClock } from '../utils/useRealtimeClock';
 
 interface HeaderProps {
   title?: string;
@@ -9,6 +26,8 @@ interface HeaderProps {
   titleClassName?: string;
   subtitleClassName?: string;
   currentUser?: UserProfile;
+  isSidebarHidden?: boolean;
+  onToggleSidebar?: () => void;
   onToggleMobileSidebar?: () => void;
   onLogout?: () => void;
 }
@@ -20,29 +39,66 @@ export const Header: React.FC<HeaderProps> = ({
   titleClassName,
   subtitleClassName,
   currentUser,
+  isSidebarHidden = false,
+  onToggleSidebar,
   onToggleMobileSidebar,
   onLogout,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isResyncing, setIsResyncing] = useState(false);
+
+  const {
+    formattedFullPST,
+    formattedTimePST,
+    isOnline,
+    isSynced,
+    syncNow,
+  } = useRealtimeClock();
+
+  const handleManualSync = async () => {
+    setIsResyncing(true);
+    await syncNow();
+    setTimeout(() => setIsResyncing(false), 500);
+  };
 
   const breadcrumbSegments = breadcrumb.split('/').map((s) => s.trim());
   const isPcpScoped = currentUser?.assignedAor === 'PCP';
 
+  const handleToggle = () => {
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    } else if (onToggleMobileSidebar) {
+      onToggleMobileSidebar();
+    }
+  };
+
   return (
-    <header className="bg-white border-b border-slate-200/80 px-4 sm:px-8 py-3.5 sm:py-4 shrink-0">
+    <header className="bg-white border-b border-slate-200/80 px-4 sm:px-8 py-3.5 sm:py-4 shrink-0 transition-all">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Left: Mobile Menu Toggle, Breadcrumb, Main Title & Subtitle */}
+        {/* Left: Sidebar Toggle, Breadcrumb, Main Title & Subtitle */}
         <div className="flex items-start gap-3">
-          {/* Mobile hamburger menu button */}
+          {/* Universal Sidebar Toggle Button (Hides/Shows sidebar on Desktop, opens drawer on Mobile) */}
           <button
             type="button"
-            onClick={onToggleMobileSidebar}
-            className="p-2 -ml-1 text-slate-700 hover:text-blue-600 rounded-lg hover:bg-slate-100 lg:hidden transition-colors mt-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            title="Toggle navigation sidebar"
-            aria-label="Toggle navigation sidebar"
+            onClick={handleToggle}
+            className={`p-2 -ml-1 rounded-lg transition-all mt-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 flex items-center justify-center shrink-0 ${
+              isSidebarHidden
+                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 shadow-2xs'
+                : 'text-slate-600 hover:text-blue-600 hover:bg-slate-100'
+            }`}
+            title={
+              isSidebarHidden
+                ? 'Show sidebar (Ctrl+B)'
+                : 'Hide sidebar (Ctrl+B)'
+            }
+            aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
           >
-            <Menu className="w-5 h-5 text-slate-700" />
+            {isSidebarHidden ? (
+              <PanelLeftOpen className="w-5 h-5 text-blue-600" />
+            ) : (
+              <PanelLeft className="w-5 h-5 text-slate-700" />
+            )}
           </button>
 
           <div>
@@ -75,18 +131,68 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right: Clock & User Profile Bar */}
-        <div className="flex items-center gap-5 self-end md:self-auto">
-          {/* Philippine Standard Time Display */}
+        <div className="flex items-center gap-3 sm:gap-5 self-end md:self-auto">
+          {/* Philippine Standard Time Display (Desktop / Tablet) */}
           <div className="text-right hidden sm:block">
-            <span className="block text-[11px] font-semibold text-blue-600 tracking-wide">
-              Philippine Standard Time (PST)
-            </span>
-            <span className="block text-xs font-bold text-slate-800 font-mono mt-0.5">
-              Wed, Apr 23, 2025 10:42 AM
-            </span>
+            <div className="flex items-center justify-end gap-1.5">
+              {isOnline ? (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200"
+                  title="Synced with real-time network clock"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span>Synced</span>
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200"
+                  title="Offline mode: Using device system clock"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span>Offline</span>
+                </span>
+              )}
+
+              <span className="text-[11px] font-semibold text-blue-600 tracking-wide">
+                Philippine Standard Time (PST)
+              </span>
+
+              <button
+                type="button"
+                onClick={handleManualSync}
+                className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors"
+                title="Resync clock with time server"
+              >
+                <RefreshCw
+                  className={`w-3 h-3 ${isResyncing ? 'animate-spin text-blue-600' : ''}`}
+                />
+              </button>
+            </div>
+
+            <div
+              onClick={handleManualSync}
+              className="text-xs font-bold text-slate-800 font-mono mt-0.5 tabular-nums cursor-pointer hover:text-blue-600 transition-colors select-none"
+              title="Click to resync time"
+            >
+              {formattedFullPST}
+            </div>
           </div>
 
-          {/* Notification Bell with red alert dot */}
+          {/* Compact Clock for Mobile (< sm) */}
+          <div
+            onClick={handleManualSync}
+            className="sm:hidden flex items-center gap-1 text-[11px] font-mono font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+            title={`Philippine Standard Time: ${formattedFullPST} (Tap to resync)`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+              }`}
+            />
+            <span>{formattedTimePST}</span>
+          </div>
+
+          {/* Notification Bell with red alert count */}
           <div className="relative">
             <button
               type="button"
@@ -95,8 +201,10 @@ export const Header: React.FC<HeaderProps> = ({
               title="Notifications"
             >
               <Bell className="w-5 h-5 text-blue-600" />
-              {/* Notification indicator red badge */}
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white ring-1 ring-rose-300" />
+              {/* Notification count badge */}
+              <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-white">
+                1
+              </span>
             </button>
 
             {showNotifications && (
