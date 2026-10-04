@@ -44,9 +44,10 @@ for(const service of services){
 }
 
 const api=services.find(service=>service.name==='alertx-api');
-if(services.length!==1||!api||api.type!=='web'||api.runtime!=='docker')fail('The current website must use one Docker web service named alertx-api');
+if(services.length!==1||!api||api.type!=='web'||api.runtime!=='node')fail('The current website must use one Node web service named alertx-api');
 if(databases.length)fail('The current website does not use a Render database');
-if(api.dockerCommand!=='node server.js')fail('The website must run the compiled root server');
+if(api.buildCommand!=='npm install --include=dev && npm run build')fail('The website must install and build with npm');
+if(api.startCommand!=='npm start')fail('The website must start with npm');
 if(api.preDeployCommand)fail('The website must not run database migrations');
 if(api.healthCheckPath!=='/api/health')fail('The website must use /api/health');
 if(api.branch!=='main'||api.autoDeployTrigger!=='checksPass')fail('Deploy main only after GitHub checks pass');

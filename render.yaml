@@ -7,21 +7,22 @@ previews:
 
 services:
   - type: web
-    runtime: docker
+    runtime: node
     name: alertx-api
     repo: https://github.com/Glowmastar/Earthquake-Alert-within-Station-Area-of-Responsibility-Alert-X
     branch: main
     region: singapore
     plan: 0.5c-512mb
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    dockerCommand: node server.js
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
     # Clear the previous database-migration hook on an existing service.
     preDeployCommand: ""
     healthCheckPath: /api/health
     autoDeployTrigger: checksPass
     maxShutdownDelaySeconds: 60
     envVars:
+      - key: NODE_VERSION
+        value: "24"
       - key: NODE_ENV
         value: production
       - key: PORT

@@ -340,6 +340,10 @@ function fetchPhivolcsEarthquakes(forceRefresh: boolean = false): Promise<any[]>
 }
 
 // API Routes
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok' });
+});
+
 app.get('/api/time', (_req: Request, res: Response) => {
   const now = new Date();
   res.json({
@@ -477,7 +481,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
+    app.get('/{*path}', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   }

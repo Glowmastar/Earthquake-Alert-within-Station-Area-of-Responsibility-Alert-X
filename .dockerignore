@@ -6,6 +6,7 @@ node_modules
 build
 dist
 server.js
+firebase-applet-config.json
 *.zip
 test-results
 _review_zip
