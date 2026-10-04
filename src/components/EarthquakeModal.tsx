@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, AlertCircle, Send, CheckCircle2, Clock, MapPin, Layers, Radio } from 'lucide-react';
+import { X, AlertCircle, Send, CheckCircle2, Clock, MapPin, Layers, Radio, ExternalLink } from 'lucide-react';
 import { EarthquakeRecord } from '../types';
 
 interface EarthquakeModalProps {
@@ -182,14 +182,27 @@ export const EarthquakeModal: React.FC<EarthquakeModalProps> = ({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            Close
-          </button>
+        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              Close
+            </button>
+            {earthquake.bulletinUrl && (
+              <a
+                href={earthquake.bulletinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors inline-flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                <span>PHIVOLCS Bulletin Page</span>
+              </a>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {earthquake.status === 'For Review' && onApproveReview && (

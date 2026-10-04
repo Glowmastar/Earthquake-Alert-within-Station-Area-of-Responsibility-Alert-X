@@ -22,10 +22,10 @@ let cache: CachedData | null = null;
 const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
 
 // Scraper & parser for https://earthquake.phivolcs.dost.gov.ph/
-function fetchPhivolcsEarthquakes(): Promise<any[]> {
+function fetchPhivolcsEarthquakes(forceRefresh: boolean = false): Promise<any[]> {
   return new Promise((resolve, reject) => {
-    // If cache is fresh, return cached records
-    if (cache && Date.now() - cache.timestamp < CACHE_TTL_MS) {
+    // If cache is fresh and not force-refreshing, return cached records
+    if (!forceRefresh && cache && Date.now() - cache.timestamp < CACHE_TTL_MS) {
       return resolve(cache.records);
     }
 
@@ -129,32 +129,125 @@ function fetchPhivolcsEarthquakes(): Promise<any[]> {
                     dateIso = `${year}-${mNum}-${day}`;
                   }
 
-                  // AOR Classification Rules
+                  // Parse Province and Municipality from PHIVOLCS location
+                  let province: string | undefined = undefined;
+                  let municipality: string | undefined = undefined;
+                  const parenMatches = [...location.matchAll(/\(([^()]+)\)/g)];
+                  if (parenMatches.length > 0) {
+                    province = parenMatches[parenMatches.length - 1][1].trim();
+                    const beforeLastParen = location.substring(0, location.lastIndexOf('(')).trim();
+                    const ofMatch = beforeLastParen.match(/\bof\s+(.+)$/i);
+                    if (ofMatch) {
+                      municipality = ofMatch[1].replace(/\s*\([^)]*\)\s*$/, '').trim();
+                    } else {
+                      municipality = beforeLastParen;
+                    }
+                  }
+
+                  // AOR Classification Rules per Operational Ruling
                   let aor: 'PCP' | 'BIP' | 'CGP' | 'Outside AOR' = 'Outside AOR';
                   let aorStatus: 'Inside' | 'Outside' = 'Outside';
                   let stationName: string | undefined = undefined;
                   let matchedAORFull: string | undefined = undefined;
 
-                  // PCP: Palayan Station (Central / Northern Luzon)
-                  if (lat >= 14.0 && lat <= 18.2 && lng >= 120.0 && lng <= 122.8) {
+                  const provLower = (province || '').toLowerCase();
+                  const muniLower = (municipality || '').toLowerCase();
+                  const locLower = location.toLowerCase();
+
+                  // CGP: Cagayan Seismic Station coverage set (Operational Ruling Sec. 2.3):
+                  // 1. Bukidnon, 2. Camiguin, 3. Lanao del Norte, 4. Lanao del Sur,
+                  // 5. Misamis Occidental, 6. Misamis Oriental, 7. Cagayan de Oro (host city/locality)
+                  const cgpCoverageSet = [
+                    'bukidnon',
+                    'camiguin',
+                    'camuigin',
+                    'lanao del norte',
+                    'lanao del sur',
+                    'misamis occidental',
+                    'misamis oriental',
+                    'cagayan de oro',
+                    'iligan',
+                    'gingoog',
+                    'el salvador',
+                    'malaybalay',
+                    'valencia',
+                    'talakag',
+                    'manolo fortich',
+                    'mambajao',
+                    'catarman',
+                    'marawi',
+                    'wao',
+                    'tubod',
+                    'kapatagan',
+                    'oroquieta',
+                    'ozamiz',
+                    'tangub',
+                    'jimenez',
+                  ];
+
+                  const isCgpMatch = cgpCoverageSet.some(
+                    (area) =>
+                      provLower.includes(area) ||
+                      muniLower.includes(area) ||
+                      locLower.includes(`(${area})`) ||
+                      locLower.includes(`of ${area}`) ||
+                      locLower.includes(area)
+                  );
+
+                  // PCP: Palayan Station (Central Luzon)
+                  const pcpCoverageSet = [
+                    'nueva ecija',
+                    'aurora',
+                    'bulacan',
+                    'pampanga',
+                    'tarlac',
+                    'pangasinan',
+                    'nueva vizcaya',
+                    'quirino',
+                    'palayan',
+                  ];
+                  const isPcpMatch = pcpCoverageSet.some(
+                    (area) =>
+                      provLower.includes(area) ||
+                      muniLower.includes(area) ||
+                      locLower.includes(`(${area})`) ||
+                      locLower.includes(`of ${area}`) ||
+                      locLower.includes(area)
+                  ) || (lat >= 14.5 && lat <= 17.5 && lng >= 120.3 && lng <= 122.2);
+
+                  // BIP: Bislig Station (Caraga / Eastern Mindanao)
+                  const bipCoverageSet = [
+                    'surigao del sur',
+                    'surigao del norte',
+                    'agusan del sur',
+                    'agusan del norte',
+                    'dinagat',
+                    'bislig',
+                  ];
+                  const isBipMatch = bipCoverageSet.some(
+                    (area) =>
+                      provLower.includes(area) ||
+                      muniLower.includes(area) ||
+                      locLower.includes(`(${area})`) ||
+                      locLower.includes(`of ${area}`) ||
+                      locLower.includes(area)
+                  ) || (lat >= 7.8 && lat <= 10.3 && lng >= 125.6 && lng <= 127.2);
+
+                  if (isCgpMatch) {
+                    aor = 'CGP';
+                    aorStatus = 'Inside';
+                    stationName = 'Cagayan Seismic Station';
+                    matchedAORFull = 'CGP (Cagayan Seismic Station)';
+                  } else if (isPcpMatch) {
                     aor = 'PCP';
                     aorStatus = 'Inside';
                     stationName = 'Palayan Seismic Station';
                     matchedAORFull = 'PCP (Palayan Seismic Station)';
-                  }
-                  // BIP: Bislig Station (Eastern Mindanao / Surigao / Agusan)
-                  else if (lat >= 7.5 && lat <= 10.5 && lng >= 125.5 && lng <= 127.5) {
+                  } else if (isBipMatch) {
                     aor = 'BIP';
                     aorStatus = 'Inside';
                     stationName = 'Bislig Seismic Station';
                     matchedAORFull = 'BIP (Bislig Seismic Station)';
-                  }
-                  // CGP: Cagayan de Oro Station (Northern Mindanao / Misamis / Bukidnon)
-                  else if (lat >= 7.0 && lat <= 9.5 && lng >= 123.5 && lng <= 125.5) {
-                    aor = 'CGP';
-                    aorStatus = 'Inside';
-                    stationName = 'Cagayan de Oro Seismic Station';
-                    matchedAORFull = 'CGP (Cagayan de Oro Seismic Station)';
                   }
 
                   // Determine notification status
@@ -168,21 +261,6 @@ function fetchPhivolcsEarthquakes(): Promise<any[]> {
                       status = 'For Review';
                     } else {
                       status = 'No Alert';
-                    }
-                  }
-
-                  // Parse Province and Municipality from PHIVOLCS location
-                  let province: string | undefined = undefined;
-                  let municipality: string | undefined = undefined;
-                  const parenMatches = [...location.matchAll(/\(([^()]+)\)/g)];
-                  if (parenMatches.length > 0) {
-                    province = parenMatches[parenMatches.length - 1][1].trim();
-                    const beforeLastParen = location.substring(0, location.lastIndexOf('(')).trim();
-                    const ofMatch = beforeLastParen.match(/\bof\s+(.+)$/i);
-                    if (ofMatch) {
-                      municipality = ofMatch[1].replace(/\s*\([^)]*\)\s*$/, '').trim();
-                    } else {
-                      municipality = beforeLastParen;
                     }
                   }
 
@@ -219,6 +297,7 @@ function fetchPhivolcsEarthquakes(): Promise<any[]> {
                     matchedAORFull,
                     datasetVersion: 'v2026.09.24',
                     coordinateLocation: `${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E`,
+                    bulletinUrl: bulletinUrl || undefined,
                     alertDetails:
                       aorStatus === 'Inside'
                         ? {
@@ -261,10 +340,6 @@ function fetchPhivolcsEarthquakes(): Promise<any[]> {
 }
 
 // API Routes
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok' });
-});
-
 app.get('/api/time', (_req: Request, res: Response) => {
   const now = new Date();
   res.json({
@@ -286,10 +361,11 @@ app.get('/api/time', (_req: Request, res: Response) => {
   });
 });
 
-app.get('/api/phivolcs-earthquakes', async (_req: Request, res: Response) => {
+app.get('/api/phivolcs-earthquakes', async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
-    const records = await fetchPhivolcsEarthquakes();
+    const force = req.query.refresh === 'true' || req.query.force === 'true';
+    const records = await fetchPhivolcsEarthquakes(force);
     const durationMs = Date.now() - startTime;
     res.json({
       success: true,
@@ -385,6 +461,9 @@ app.post('/api/send-test-alert', async (req: Request, res: Response) => {
   });
 });
 
+// Serve public static assets (including official GIS / GeoJSON datasets)
+app.use(express.static(path.resolve(__dirname, 'public')));
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
@@ -398,7 +477,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('/{*path}', (_req: Request, res: Response) => {
+    app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   }

@@ -41,6 +41,7 @@ export interface EarthquakeRecord {
   distanceToBoundaryKm?: number;
   epicenterZone?: string;
   outsideReason?: string;
+  bulletinUrl?: string;
   alertDetails?: {
     sentAt?: string;
     recipientsCount?: number;
@@ -94,6 +95,26 @@ export interface UserProfile {
 }
 
 export const PRECONFIGURED_USERS: Record<string, UserProfile & { passwordPlainText: string }> = {
+  'cagayanseismicstation@phivolcs.gov.ph': {
+    id: 'user-cgp-cagayan',
+    username: 'cagayanseismicstation@phivolcs.gov.ph',
+    email: 'cagayanseismicstation@phivolcs.gov.ph',
+    name: 'Cagayan Seismic Station',
+    role: 'User',
+    assignedAor: 'CGP',
+    stationName: 'CGP - Cagayan Seismic Station (Northern Mindanao)',
+    passwordPlainText: 'cagayanss12345',
+  },
+  'cagayanseismicstation@phivolcs.dost.gov.ph': {
+    id: 'user-cgp-cagayan',
+    username: 'cagayanseismicstation@phivolcs.dost.gov.ph',
+    email: 'cagayanseismicstation@phivolcs.dost.gov.ph',
+    name: 'Cagayan Seismic Station',
+    role: 'User',
+    assignedAor: 'CGP',
+    stationName: 'CGP - Cagayan Seismic Station (Northern Mindanao)',
+    passwordPlainText: 'cagayanss12345',
+  },
   'palayanz@phivolcs.dost.gov.ph': {
     id: 'user-pcp-palayan',
     username: 'palayanz@phivolcs.dost.gov.ph',

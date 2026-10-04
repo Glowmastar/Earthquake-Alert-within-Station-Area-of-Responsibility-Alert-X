@@ -67,27 +67,33 @@ const INITIAL_ROLES: RoleData[] = [
   {
     id: 'role-user',
     name: 'User',
-    description: 'Base station-scoped access (PCP AOR)',
+    description: 'Base station-scoped access (PCP & CGP AOR)',
     scope: 'Assigned stations',
-    keyPermissions: 'Dashboard, records, recipients (PCP AOR)',
-    usersCount: 1,
+    keyPermissions: 'Dashboard, records, recipients (Station AOR)',
+    usersCount: 2,
     status: 'Active',
     assignedStations: [
       { code: 'PCP', name: 'Palayan Seismic Station (Central Luzon)' },
+      { code: 'CGP', name: 'Cagayan Seismic Station (Northern Mindanao)' },
     ],
     permissions: [
-      'View Dashboard (Scoped to PCP AOR)',
-      'View Earthquake Records (PCP Events Only)',
-      'View Recipients (PCP Distribution List)',
-      'View Palayan Seismic Station Topology',
+      'View Dashboard (Scoped to Station AOR)',
+      'View Earthquake Records (Station Events Only)',
+      'View Recipients (Station Distribution List)',
+      'View Assigned Seismic Station Topology',
     ],
     restricted: [
       'Role management',
       'System configuration',
       'Approval actions',
-      'Non-PCP AOR Zones',
+      'Non-assigned AOR Zones',
     ],
     auditHistory: [
+      {
+        timestamp: 'Oct 03, 2026 05:07 PM',
+        actor: 'Juan Dela Cruz (System Administrator)',
+        change: 'Created Cagayan Seismic Station user account (cagayanseismicstation@phivolcs.gov.ph) scoped to CGP AOR',
+      },
       {
         timestamp: 'Sep 24, 2026 03:20 PM',
         actor: 'Juan Dela Cruz (System Administrator)',
@@ -818,23 +824,42 @@ export const RolesView: React.FC<RolesViewProps> = ({ onNavigateToAudit }) => {
             {/* Assigned Accounts */}
             <div className="space-y-2">
               <div className="text-xs font-bold text-slate-800">
-                Assigned Accounts ({selectedRole.name === 'User' ? 1 : selectedRole.name === 'Administrator' ? 1 : 0})
+                Assigned Accounts ({selectedRole.name === 'User' ? 2 : selectedRole.name === 'Administrator' ? 1 : 0})
               </div>
               {selectedRole.name === 'User' ? (
-                <div className="bg-blue-50/70 border border-blue-200 rounded-lg p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-blue-950">Palayan Seismic Station</span>
-                    <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold border border-blue-200">
-                      User Role • Active
-                    </span>
+                <div className="space-y-2">
+                  <div className="bg-cyan-50/70 border border-cyan-200 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-cyan-950">Cagayan Seismic Station</span>
+                      <span className="text-[10px] font-mono bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded font-bold border border-cyan-200">
+                        User Role • Active
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-700 font-mono flex items-center gap-1.5">
+                      <span className="text-slate-500">Username:</span>
+                      <strong>cagayanseismicstation@phivolcs.gov.ph</strong>
+                    </div>
+                    <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
+                      <span className="text-slate-500">Scope:</span>
+                      <span className="font-semibold text-cyan-700">Only display AOR within CGP (Cagayan)</span>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-700 font-mono flex items-center gap-1.5">
-                    <span className="text-slate-500">Username:</span>
-                    <strong>palayanz@phivolcs.dost.gov.ph</strong>
-                  </div>
-                  <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
-                    <span className="text-slate-500">Scope:</span>
-                    <span className="font-semibold text-blue-700">Only display AOR within PCP</span>
+
+                  <div className="bg-blue-50/70 border border-blue-200 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-blue-950">Palayan Seismic Station</span>
+                      <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold border border-blue-200">
+                        User Role • Active
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-700 font-mono flex items-center gap-1.5">
+                      <span className="text-slate-500">Username:</span>
+                      <strong>palayanz@phivolcs.dost.gov.ph</strong>
+                    </div>
+                    <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
+                      <span className="text-slate-500">Scope:</span>
+                      <span className="font-semibold text-blue-700">Only display AOR within PCP</span>
+                    </div>
                   </div>
                 </div>
               ) : selectedRole.name === 'Administrator' ? (

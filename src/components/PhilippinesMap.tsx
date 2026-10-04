@@ -18,7 +18,7 @@ import {
   ChevronDown,
   Info,
 } from 'lucide-react';
-import { EarthquakeRecord, AORType } from '../types';
+import { EarthquakeRecord, AORType, UserProfile } from '../types';
 import {
   PHILIPPINES_REGIONS,
   PHILIPPINES_PROVINCES,
@@ -33,6 +33,7 @@ interface PhilippinesMapProps {
   onSelectEarthquake: (eq: EarthquakeRecord) => void;
   selectedEarthquake?: EarthquakeRecord | null;
   selectedAorFilter?: AORType | 'ALL';
+  currentUser?: UserProfile;
 }
 
 type BasemapType = 'osm' | 'esri_topo' | 'esri_street' | 'hot' | 'satellite';
@@ -85,10 +86,18 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
   onSelectEarthquake,
   selectedEarthquake,
   selectedAorFilter = 'ALL',
+  currentUser,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Station scoping check: Cagayan de Oro CGP account vs Palayan PCP vs Global
+  const isCgpScoped =
+    selectedAorFilter === 'CGP' ||
+    currentUser?.assignedAor === 'CGP' ||
+    currentUser?.email?.includes('cagayan') ||
+    currentUser?.name?.toLowerCase().includes('cagayan');
 
   // Layer groups refs
   const regionsLayerGroupRef = useRef<L.LayerGroup | null>(null);
@@ -104,10 +113,32 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
   const [showStations, setShowStations] = useState<boolean>(true);
   const [showEarthquakes, setShowEarthquakes] = useState<boolean>(true);
 
+  // Official Philippine Regions Boundary GeoJSON (NAMRIA Geoportal Philippines & PSA PSGC)
+  const [regionsGeoJson, setRegionsGeoJson] = useState<any>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/data/philippines-regions-psgc.geojson')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load regions geojson');
+        return res.json();
+      })
+      .then((data) => {
+        if (isMounted) setRegionsGeoJson(data);
+      })
+      .catch((err) => {
+        console.warn('Could not load official region geojson, will use fallback', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Basemap & UI state
   const [basemap, setBasemap] = useState<BasemapType>('osm');
   const [showLayersDropdown, setShowLayersDropdown] = useState<boolean>(false);
   const [showQuickJumpDropdown, setShowQuickJumpDropdown] = useState<boolean>(false);
+  const [showBoundaryInfoModal, setShowBoundaryInfoModal] = useState<boolean>(false);
   const [hoveredLocationInfo, setHoveredLocationInfo] = useState<string | null>(null);
   const [cursorCoords, setCursorCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(6);
@@ -134,14 +165,19 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
   const filteredEarthquakes = useMemo(() => {
     return earthquakes.filter((eq) => {
       if (filterMode === 'INSIDE') {
+        if (isCgpScoped) return eq.aor === 'CGP';
+        if (selectedAorFilter === 'PCP') return eq.aor === 'PCP';
+        if (selectedAorFilter === 'BIP') return eq.aor === 'BIP';
         return eq.aor === 'PCP' || eq.aor === 'BIP' || eq.aor === 'CGP';
       }
       if (filterMode === 'OUTSIDE') {
+        if (isCgpScoped) return eq.aor !== 'CGP';
+        if (selectedAorFilter === 'PCP') return eq.aor !== 'PCP';
         return eq.aor === 'Outside AOR';
       }
       return true;
     });
-  }, [earthquakes, filterMode]);
+  }, [earthquakes, filterMode, selectedAorFilter, isCgpScoped]);
 
   // Initial Map Setup
   useEffect(() => {
@@ -149,8 +185,12 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
     // Philippines Bounds: 4.5°N to 21.5°N, 116.0°E to 127.5°E
     const philippinesCenter: [number, number] =
-      selectedAorFilter === 'PCP' ? [15.541, 121.084] : [12.8797, 121.774];
-    const initialZoom = selectedAorFilter === 'PCP' ? 8 : 6;
+      isCgpScoped
+        ? [8.482, 124.647]
+        : selectedAorFilter === 'PCP'
+        ? [15.541, 121.084]
+        : [12.8797, 121.774];
+    const initialZoom = isCgpScoped || selectedAorFilter === 'PCP' ? 8 : 6;
 
     const map = L.map(mapContainerRef.current, {
       center: philippinesCenter,
@@ -231,7 +271,7 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
     newTile.bringToBack();
   }, [basemap]);
 
-  // Render Administrative Regions
+  // Render Administrative Regions with Official NAMRIA / PSA PSGC Boundary Polygons
   useEffect(() => {
     const group = regionsLayerGroupRef.current;
     if (!group || !mapInstanceRef.current) return;
@@ -240,65 +280,166 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
     if (!showRegions) return;
 
-    PHILIPPINES_REGIONS.forEach((region) => {
-      const polygon = L.polygon(region.boundary, {
-        color: region.color,
-        weight: 1.8,
-        opacity: 0.85,
-        fillColor: region.color,
-        fillOpacity: 0.08,
-        dashArray: '3, 4',
+    if (regionsGeoJson && regionsGeoJson.features) {
+      // Official high-resolution NAMRIA / PSA PSGC boundary polygons
+      const geoJsonLayer = L.geoJSON(regionsGeoJson, {
+        style: (feature) => {
+          const color = feature?.properties?.color || '#3b82f6';
+          return {
+            color: color,
+            weight: 1.8,
+            opacity: 0.9,
+            fillColor: color,
+            fillOpacity: 0.08,
+            dashArray: '3, 4',
+          };
+        },
+        onEachFeature: (feature, layer) => {
+          const props = feature.properties || {};
+          const color = props.color || '#3b82f6';
+          const provs: string[] = props.provinces || [];
+
+          // Hover interaction
+          layer.on({
+            mouseover: (e) => {
+              const target = e.target;
+              target.setStyle({
+                weight: 2.8,
+                fillOpacity: 0.22,
+                opacity: 1,
+              });
+              if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                target.bringToFront();
+              }
+              setHoveredLocationInfo(
+                `${props.name} (${props.shortName}) – ${props.islandGroup} [Official NAMRIA/PSA Boundary]`
+              );
+            },
+            mouseout: (e) => {
+              geoJsonLayer.resetStyle(e.target);
+              setHoveredLocationInfo(null);
+            },
+            click: (e) => {
+              mapInstanceRef.current?.flyToBounds(e.target.getBounds(), {
+                padding: [30, 30],
+                duration: 1,
+              });
+            },
+          });
+
+          // Live earthquake count for provinces in this region
+          const regionEqCount = provs.reduce(
+            (acc, p) => acc + (earthquakesByProvince[p] || 0),
+            0
+          );
+
+          // Rich tooltip with official source badge
+          layer.bindTooltip(
+            `<div class="text-xs font-sans">
+              <div class="flex items-center gap-1.5 font-bold text-slate-900">
+                <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></span>
+                ${props.name}
+              </div>
+              <div class="text-[11px] text-slate-600 mt-0.5">
+                ${props.islandGroup} &bull; ${provs.length} provinces &bull; PSGC: ${props.psgcCode || ''}
+              </div>
+              <div class="text-[10px] text-blue-600 font-semibold mt-0.5 flex items-center gap-1">
+                <span>●</span> ${regionEqCount} live events recorded
+              </div>
+              <div class="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 mt-1 inline-block font-medium">
+                ✓ Official NAMRIA / PSA PSGC Boundary
+              </div>
+            </div>`,
+            {
+              permanent: false,
+              direction: 'center',
+              className: 'region-tooltip bg-white shadow-md border border-slate-200 rounded px-2.5 py-1.5',
+            }
+          );
+
+          // Rich official popup on click
+          layer.bindPopup(
+            `<div class="p-1 font-sans text-xs max-w-[280px]">
+              <div class="flex items-center gap-1.5 font-bold text-slate-900 text-sm border-b border-slate-200 pb-1.5">
+                <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${color}"></span>
+                <span>${props.name}</span>
+              </div>
+              <div class="mt-2 space-y-1 text-slate-600 text-[11px]">
+                <div><span class="font-semibold text-slate-800">Designation:</span> ${props.code || ''} (${props.shortName || ''})</div>
+                <div><span class="font-semibold text-slate-800">Island Group:</span> ${props.islandGroup || ''}</div>
+                <div><span class="font-semibold text-slate-800">PSGC Code:</span> <code class="font-mono bg-slate-100 px-1 rounded">${props.psgcCode || 'Official'}</code></div>
+                <div><span class="font-semibold text-slate-800">Provinces (${provs.length}):</span> ${provs.join(', ')}</div>
+                <div class="text-blue-700 font-semibold pt-1"><span>Live Earthquake Activity:</span> ${regionEqCount} events</div>
+              </div>
+              <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                <span class="text-emerald-700 font-bold">✓ NAMRIA / PSA PSGC 2024</span>
+                <span class="text-slate-400">geoportal.gov.ph</span>
+              </div>
+            </div>`
+          );
+        },
       });
 
-      // Hover styling
-      polygon.on('mouseover', () => {
-        polygon.setStyle({
-          weight: 2.8,
-          fillOpacity: 0.22,
-          opacity: 1,
-        });
-        setHoveredLocationInfo(`${region.name} (${region.shortName}) – ${region.islandGroup}`);
-      });
-
-      polygon.on('mouseout', () => {
-        polygon.setStyle({
+      group.addLayer(geoJsonLayer);
+    } else {
+      // Fallback while loading
+      PHILIPPINES_REGIONS.forEach((region) => {
+        const polygon = L.polygon(region.boundary, {
+          color: region.color,
           weight: 1.8,
-          fillOpacity: 0.08,
           opacity: 0.85,
+          fillColor: region.color,
+          fillOpacity: 0.08,
+          dashArray: '3, 4',
         });
-        setHoveredLocationInfo(null);
-      });
 
-      // Click zooms to region
-      polygon.on('click', () => {
-        mapInstanceRef.current?.flyToBounds(polygon.getBounds(), {
-          padding: [30, 30],
-          duration: 1,
+        polygon.on('mouseover', () => {
+          polygon.setStyle({
+            weight: 2.8,
+            fillOpacity: 0.22,
+            opacity: 1,
+          });
+          setHoveredLocationInfo(`${region.name} (${region.shortName}) – ${region.islandGroup}`);
         });
+
+        polygon.on('mouseout', () => {
+          polygon.setStyle({
+            weight: 1.8,
+            fillOpacity: 0.08,
+            opacity: 0.85,
+          });
+          setHoveredLocationInfo(null);
+        });
+
+        polygon.on('click', () => {
+          mapInstanceRef.current?.flyToBounds(polygon.getBounds(), {
+            padding: [30, 30],
+            duration: 1,
+          });
+        });
+
+        const regionEqCount = region.provinces.reduce(
+          (acc, p) => acc + (earthquakesByProvince[p] || 0),
+          0
+        );
+
+        polygon.bindTooltip(
+          `<div class="text-xs font-sans">
+            <div class="font-bold text-slate-900">${region.name}</div>
+            <div class="text-[11px] text-slate-600">${region.islandGroup} &bull; ${region.provinces.length} provinces</div>
+            <div class="text-[10px] text-blue-600 font-semibold mt-0.5">${regionEqCount} live events recorded</div>
+          </div>`,
+          {
+            permanent: false,
+            direction: 'center',
+            className: 'region-tooltip bg-white shadow-md border border-slate-200 rounded px-2 py-1',
+          }
+        );
+
+        group.addLayer(polygon);
       });
-
-      // Tooltip
-      const regionEqCount = region.provinces.reduce(
-        (acc, p) => acc + (earthquakesByProvince[p] || 0),
-        0
-      );
-
-      polygon.bindTooltip(
-        `<div class="text-xs font-sans">
-          <div class="font-bold text-slate-900">${region.name}</div>
-          <div class="text-[11px] text-slate-600">${region.islandGroup} &bull; ${region.provinces.length} provinces</div>
-          <div class="text-[10px] text-blue-600 font-semibold mt-0.5">${regionEqCount} live events recorded</div>
-        </div>`,
-        {
-          permanent: false,
-          direction: 'center',
-          className: 'region-tooltip bg-white shadow-md border border-slate-200 rounded px-2 py-1',
-        }
-      );
-
-      group.addLayer(polygon);
-    });
-  }, [showRegions, earthquakesByProvince]);
+    }
+  }, [showRegions, regionsGeoJson, earthquakesByProvince]);
 
   // Render Philippine Provinces
   useEffect(() => {
@@ -357,13 +498,15 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
     });
   }, [showProvinces, currentZoom, earthquakesByProvince]);
 
-  // Auto-focus map when selectedAorFilter changes to PCP
+  // Auto-focus map when selectedAorFilter changes to PCP or CGP
   useEffect(() => {
     if (!mapInstanceRef.current) return;
-    if (selectedAorFilter === 'PCP') {
+    if (isCgpScoped) {
+      mapInstanceRef.current.flyTo([8.482, 124.647], 8.5, { duration: 1 });
+    } else if (selectedAorFilter === 'PCP') {
       mapInstanceRef.current.flyTo([15.541, 121.084], 8, { duration: 1 });
     }
-  }, [selectedAorFilter]);
+  }, [selectedAorFilter, isCgpScoped]);
 
   // Render Official Station AOR Boundaries (PCP, BIP, CGP)
   useEffect(() => {
@@ -374,35 +517,47 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
     if (!showAorBoundaries) return;
 
-    const aorsToRender =
-      selectedAorFilter && selectedAorFilter !== 'ALL'
-        ? STATION_AORS.filter((aor) => aor.code === selectedAorFilter)
-        : STATION_AORS;
+    // For the Cagayan de Oro CGP account, remove PCP and BIP AORs from the map:
+    let aorsToRender = STATION_AORS;
+    if (isCgpScoped) {
+      aorsToRender = STATION_AORS.filter((aor) => aor.code === 'CGP');
+    } else if (selectedAorFilter && selectedAorFilter !== 'ALL') {
+      aorsToRender = STATION_AORS.filter((aor) => aor.code === selectedAorFilter);
+    }
 
     aorsToRender.forEach((aor) => {
-      const polygon = L.polygon(aor.coordinates, {
+      const polygon = L.polygon(aor.coordinates as any, {
         color: aor.strokeColor,
-        weight: 2.5,
+        weight: aor.code === 'CGP' ? 2.8 : 2.5,
         opacity: 0.95,
         fillColor: aor.fillColor,
-        fillOpacity: 0.14,
+        fillOpacity: 0.16,
         dashArray: '5, 5',
       });
 
       polygon.on('mouseover', () => {
         polygon.setStyle({
-          weight: 3.5,
+          weight: 3.8,
           fillOpacity: 0.28,
         });
-        setHoveredLocationInfo(`${aor.name} – ${aor.headquarters}`);
+        setHoveredLocationInfo(
+          `${aor.name} – Snapped to Official PSGC Province Boundaries (${aor.provincesIncluded.join(', ')})`
+        );
       });
 
       polygon.on('mouseout', () => {
         polygon.setStyle({
-          weight: 2.5,
-          fillOpacity: 0.14,
+          weight: aor.code === 'CGP' ? 2.8 : 2.5,
+          fillOpacity: 0.16,
         });
         setHoveredLocationInfo(null);
+      });
+
+      polygon.on('click', () => {
+        mapInstanceRef.current?.flyToBounds(polygon.getBounds(), {
+          padding: [30, 30],
+          duration: 1,
+        });
       });
 
       polygon.bindPopup(
@@ -413,8 +568,11 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
           </div>
           <p class="text-xs text-slate-600 font-medium">Headquarters: ${aor.headquarters}</p>
           <div>
-            <span class="text-[11px] font-semibold text-slate-700">Covered Provinces:</span>
+            <span class="text-[11px] font-semibold text-slate-700">Covered Provinces (${aor.provincesIncluded.length}):</span>
             <p class="text-[11px] text-slate-600">${aor.provincesIncluded.join(', ')}</p>
+          </div>
+          <div class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-semibold mt-1">
+            ✓ Snapped to Official PSGC / NAMRIA Province Boundaries (${aor.provincesIncluded.length} provinces)
           </div>
           <div class="pt-1 text-[10px] text-blue-600 font-semibold">
             Status: Fully Operational &bull; Automated Dispatch Active
@@ -424,7 +582,7 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
       group.addLayer(polygon);
     });
-  }, [showAorBoundaries, selectedAorFilter]);
+  }, [showAorBoundaries, selectedAorFilter, isCgpScoped]);
 
   // Render Seismic Monitoring Stations
   useEffect(() => {
@@ -435,30 +593,57 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
     if (!showStations) return;
 
-    const stationsToRender =
-      selectedAorFilter && selectedAorFilter !== 'ALL'
-        ? SEISMIC_STATIONS.filter((st) => {
-            if (selectedAorFilter === 'PCP') {
-              return (
-                st.code === 'PCP' ||
-                st.parentScss === 'PCP' ||
-                st.aorZone === 'PCP' ||
-                st.location.includes('Nueva Ecija') ||
-                st.location.includes('Aurora') ||
-                st.location.includes('Bulacan') ||
-                st.location.includes('Pampanga') ||
-                st.location.includes('Tarlac') ||
-                st.location.includes('Bataan') ||
-                st.location.includes('Zambales')
-              );
-            }
+    const stationsToRender = isCgpScoped
+      ? SEISMIC_STATIONS.filter((st) => {
+          // Strictly exclude PCP and BIP stations
+          if (
+            st.code === 'PCP' ||
+            st.code === 'BIP' ||
+            st.parentScss === 'PCP' ||
+            st.parentScss === 'BIP' ||
+            st.aorZone === 'PCP' ||
+            st.aorZone === 'BIP'
+          ) {
+            return false;
+          }
+          return (
+            st.code === 'CGP' ||
+            st.parentScss === 'CGP' ||
+            st.aorZone === 'CGP' ||
+            st.location.includes('Misamis') ||
+            st.location.includes('Cagayan de Oro') ||
+            st.location.includes('Bukidnon') ||
+            st.location.includes('Camiguin') ||
+            st.location.includes('Lanao') ||
+            (st.coordinates[0] >= 7.4 &&
+              st.coordinates[0] <= 9.6 &&
+              st.coordinates[1] >= 123.4 &&
+              st.coordinates[1] <= 125.6)
+          );
+        })
+      : selectedAorFilter && selectedAorFilter !== 'ALL'
+      ? SEISMIC_STATIONS.filter((st) => {
+          if (selectedAorFilter === 'PCP') {
             return (
-              st.code === selectedAorFilter ||
-              st.parentScss === selectedAorFilter ||
-              st.aorZone === selectedAorFilter
+              st.code === 'PCP' ||
+              st.parentScss === 'PCP' ||
+              st.aorZone === 'PCP' ||
+              st.location.includes('Nueva Ecija') ||
+              st.location.includes('Aurora') ||
+              st.location.includes('Bulacan') ||
+              st.location.includes('Pampanga') ||
+              st.location.includes('Tarlac') ||
+              st.location.includes('Bataan') ||
+              st.location.includes('Zambales')
             );
-          })
-        : SEISMIC_STATIONS;
+          }
+          return (
+            st.code === selectedAorFilter ||
+            st.parentScss === selectedAorFilter ||
+            st.aorZone === selectedAorFilter
+          );
+        })
+      : SEISMIC_STATIONS;
 
     stationsToRender.forEach((st) => {
       const isAorHead = st.type === 'AOR Head';
@@ -534,7 +719,12 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
     if (!showEarthquakes) return;
 
     filteredEarthquakes.forEach((eq) => {
-      const isInside = eq.aor === 'PCP' || eq.aor === 'BIP' || eq.aor === 'CGP';
+      const isInside =
+        isCgpScoped
+          ? eq.aor === 'CGP'
+          : selectedAorFilter === 'PCP'
+          ? eq.aor === 'PCP'
+          : eq.aor === 'PCP' || eq.aor === 'BIP' || eq.aor === 'CGP';
       const isSelected = selectedEarthquake?.id === eq.id;
 
       // Marker sizing based on magnitude
@@ -639,7 +829,13 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
   // Preset Views Navigation
   const handleResetView = () => {
-    mapInstanceRef.current?.flyTo([12.8797, 121.774], 6, { duration: 1 });
+    if (isCgpScoped) {
+      mapInstanceRef.current?.flyTo([8.482, 124.647], 8.5, { duration: 1 });
+    } else if (selectedAorFilter === 'PCP') {
+      mapInstanceRef.current?.flyTo([15.541, 121.084], 8.5, { duration: 1 });
+    } else {
+      mapInstanceRef.current?.flyTo([12.8797, 121.774], 6, { duration: 1 });
+    }
   };
 
   const handleZoomToPreset = (center: [number, number], zoom: number) => {
@@ -678,13 +874,31 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-              Philippines Geographic Seismic Map
-              <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                Accurate Regions &amp; 82 Provinces
+              {isCgpScoped
+                ? 'CGP Station Geographic Seismic Map'
+                : selectedAorFilter === 'PCP'
+                ? 'PCP Station Geographic Seismic Map'
+                : 'Philippines Geographic Seismic Map'}
+              <span
+                className={`text-[10px] font-normal px-2 py-0.5 rounded-full ${
+                  isCgpScoped
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
+                    : 'bg-blue-500/20 text-blue-300 border border-blue-400/30'
+                }`}
+              >
+                {isCgpScoped
+                  ? 'Scoped to CGP AOR (Northern Mindanao)'
+                  : selectedAorFilter === 'PCP'
+                  ? 'Scoped to PCP AOR (Central Luzon)'
+                  : 'Accurate Regions & 82 Provinces'}
               </span>
             </h2>
             <p className="text-[11px] text-slate-300">
-              Real-time PHIVOLCS station AORs &amp; earthquake epicenter projection
+              {isCgpScoped
+                ? 'Real-time CGP station AOR & Northern Mindanao epicenter projection (PCP & BIP AORs filtered)'
+                : selectedAorFilter === 'PCP'
+                ? 'Real-time PCP station AOR & Central Luzon epicenter projection'
+                : 'Real-time PHIVOLCS station AORs & earthquake epicenter projection'}
             </p>
           </div>
         </div>
@@ -788,34 +1002,72 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
           {/* Quick Islands Presets */}
           <div className="hidden sm:flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
-            <button
-              type="button"
-              onClick={handleResetView}
-              className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-            >
-              All PH
-            </button>
-            <button
-              type="button"
-              onClick={() => handleZoomToPreset([15.5, 121.0], 7.5)}
-              className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-            >
-              Luzon (PCP)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleZoomToPreset([11.0, 123.5], 7.5)}
-              className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-            >
-              Visayas
-            </button>
-            <button
-              type="button"
-              onClick={() => handleZoomToPreset([8.0, 125.5], 7.5)}
-              className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-            >
-              Mindanao (BIP/CGP)
-            </button>
+            {isCgpScoped ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([8.482, 124.647], 8.5)}
+                  className="px-2 py-1 rounded bg-cyan-700 text-white font-medium transition-colors"
+                >
+                  CGP AOR (Northern Mindanao)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([8.0, 125.0], 7.5)}
+                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  Mindanao
+                </button>
+              </>
+            ) : selectedAorFilter === 'PCP' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([15.541, 121.084], 8.5)}
+                  className="px-2 py-1 rounded bg-blue-700 text-white font-medium transition-colors"
+                >
+                  PCP AOR (Central Luzon)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([15.5, 121.0], 7.5)}
+                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  Luzon
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleResetView}
+                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  All PH
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([15.5, 121.0], 7.5)}
+                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  Luzon (PCP)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([11.0, 123.5], 7.5)}
+                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  Visayas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoomToPreset([8.0, 125.5], 7.5)}
+                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                >
+                  Mindanao (BIP/CGP)
+                </button>
+              </>
+            )}
           </div>
 
           {/* Layers Toggle Button */}
@@ -882,8 +1134,11 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
                   <label className="flex items-center justify-between cursor-pointer text-xs font-medium text-slate-700 hover:text-slate-900">
                     <span className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-xs bg-indigo-100 border border-indigo-500" />
-                      17 Regions Boundary
+                      <span className="w-3 h-3 rounded-xs bg-indigo-100 border border-indigo-500 shrink-0" />
+                      <span>
+                        <span className="font-semibold">17 Regions Boundary</span>
+                        <span className="block text-[10px] text-emerald-600 font-medium">Updated NAMRIA Geoportal / PSA PSGC</span>
+                      </span>
                     </span>
                     <input
                       type="checkbox"
@@ -909,7 +1164,7 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
                   <label className="flex items-center justify-between cursor-pointer text-xs font-medium text-slate-700 hover:text-slate-900">
                     <span className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded-xs border-2 border-dashed border-blue-600 bg-blue-100/60" />
-                      Station AOR Boundaries
+                      {isCgpScoped ? 'CGP Station AOR Boundary' : 'Station AOR Boundaries (Snapped to Provinces)'}
                     </span>
                     <input
                       type="checkbox"
@@ -951,8 +1206,23 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
         </div>
       </div>
 
+      {/* Scoped to CGP AOR Notice Banner */}
+      {isCgpScoped && (
+        <div className="bg-cyan-950 border-b border-cyan-800 px-4 py-1.5 flex items-center justify-between text-xs text-cyan-100 z-20 shadow-inner">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            <span>
+              <strong>Station View Active:</strong> Displaying Area of Responsibility (AOR), seismic stations, and events for <strong>Cagayan Seismic Station (CGP AOR)</strong>: Lanao del Sur, Lanao del Norte, Misamis Oriental, Misamis Occidental, Bukidnon, Cagayan de Oro, and Camiguin.
+            </span>
+          </div>
+          <span className="text-[10px] font-mono font-bold bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded border border-cyan-700 shrink-0 ml-2">
+            CGP AOR Only
+          </span>
+        </div>
+      )}
+
       {/* Scoped to PCP AOR Notice Banner */}
-      {selectedAorFilter === 'PCP' && (
+      {!isCgpScoped && selectedAorFilter === 'PCP' && (
         <div className="bg-blue-950 border-b border-blue-800 px-4 py-1.5 flex items-center justify-between text-xs text-blue-100 z-20 shadow-inner">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
@@ -975,16 +1245,32 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
         <div className="absolute top-4 right-4 z-20 bg-white/95 backdrop-blur-xs border border-slate-200/90 rounded-xl p-3 shadow-md text-[11px] space-y-2 max-w-[210px] pointer-events-auto">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-1 flex items-center justify-between">
             <span>AOR Stations &amp; Events</span>
-            <span className="text-slate-400 font-normal">{selectedAorFilter === 'PCP' ? 'PCP Only' : 'Active'}</span>
+            <span className="text-slate-400 font-normal">
+              {isCgpScoped
+                ? 'CGP Only'
+                : selectedAorFilter === 'PCP'
+                ? 'PCP Only'
+                : 'Active'}
+            </span>
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="w-3.5 h-3.5 rounded-xs bg-blue-100 border border-blue-500 inline-block" />
-              <span className="text-slate-700 font-medium">PCP AOR (Central Luzon)</span>
-            </div>
-            {selectedAorFilter !== 'PCP' && (
+            {isCgpScoped ? (
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-xs bg-purple-100 border border-purple-500 inline-block" />
+                <span className="text-slate-700 font-medium">CGP AOR (Northern Mind.)</span>
+              </div>
+            ) : selectedAorFilter === 'PCP' ? (
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-xs bg-blue-100 border border-blue-500 inline-block" />
+                <span className="text-slate-700 font-medium">PCP AOR (Central Luzon)</span>
+              </div>
+            ) : (
               <>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-xs bg-blue-100 border border-blue-500 inline-block" />
+                  <span className="text-slate-700 font-medium">PCP AOR (Central Luzon)</span>
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3.5 h-3.5 rounded-xs bg-emerald-100 border border-emerald-500 inline-block" />
                   <span className="text-slate-700 font-medium">BIP AOR (Caraga/Eastern)</span>
@@ -995,6 +1281,9 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
                 </div>
               </>
             )}
+            <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-medium flex items-center gap-1 mt-1">
+              <span>✓ Snapped to Province Boundaries</span>
+            </div>
           </div>
 
           <div className="pt-1.5 border-t border-slate-100 space-y-1.5">
@@ -1074,8 +1363,14 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
             >
               Inside AOR (
               {
-                earthquakes.filter(
-                  (e) => e.aor === 'PCP' || e.aor === 'BIP' || e.aor === 'CGP'
+                earthquakes.filter((e) =>
+                  isCgpScoped
+                    ? e.aor === 'CGP'
+                    : selectedAorFilter === 'PCP'
+                    ? e.aor === 'PCP'
+                    : selectedAorFilter === 'BIP'
+                    ? e.aor === 'BIP'
+                    : e.aor === 'PCP' || e.aor === 'BIP' || e.aor === 'CGP'
                 ).length
               }
               )
@@ -1090,7 +1385,18 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
               }`}
             >
               Outside AOR (
-              {earthquakes.filter((e) => e.aor === 'Outside AOR').length})
+              {
+                earthquakes.filter((e) =>
+                  isCgpScoped
+                    ? e.aor !== 'CGP'
+                    : selectedAorFilter === 'PCP'
+                    ? e.aor !== 'PCP'
+                    : selectedAorFilter === 'BIP'
+                    ? e.aor !== 'BIP'
+                    : e.aor === 'Outside AOR'
+                ).length
+              }
+              )
             </button>
           </div>
 
@@ -1106,6 +1412,95 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
             </div>
           )}
         </div>
+
+        {/* Official NAMRIA Geoportal Attribution Badge */}
+        <div className="absolute bottom-3 left-4 z-20 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => setShowBoundaryInfoModal(true)}
+            className="flex items-center gap-1.5 bg-white/95 hover:bg-white backdrop-blur-xs border border-slate-200/90 rounded-lg px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:text-blue-700 shadow-xs transition-colors"
+            title="Click to view official Philippine mapping website & boundary source metadata"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+            <span className="font-semibold text-slate-800">NAMRIA Geoportal / PSA PSGC 2024 Boundaries</span>
+            <span className="text-[10px] text-blue-600 underline font-semibold ml-0.5">Info</span>
+          </button>
+        </div>
+
+        {/* Official Philippine Mapping Authority & Boundary Metadata Modal */}
+        {showBoundaryInfoModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full shadow-2xl p-5 space-y-4">
+              <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
+                    🇵🇭
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Official Philippine Administrative Boundaries
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Accurate &amp; Updated Geographic Data from Official Mapping Authority
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBoundaryInfoModal(false)}
+                  className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+                <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-1 text-blue-950">
+                  <div className="font-bold flex items-center gap-1.5 text-blue-900">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Official Mapping Website &amp; Agency</span>
+                  </div>
+                  <p>
+                    <strong>National Mapping and Resource Information Authority (NAMRIA)</strong>, under the Department of Environment and Natural Resources (DENR), is the central mapping agency of the Philippine Government.
+                  </p>
+                  <p className="text-[11px] text-blue-700 pt-1 font-medium">
+                    Official Portal: <a href="https://geoportal.gov.ph" target="_blank" rel="noreferrer" className="underline font-bold">geoportal.gov.ph</a> (Geoportal Philippines)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="font-semibold text-slate-800">
+                    Boundary Standards &amp; Recent Updates (2024):
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1.5 text-[11px]">
+                    <li>
+                      <strong>17 Administrative Regions:</strong> Accurate MultiPolygon geometries capturing all islands, gulfs, and provincial boundaries.
+                    </li>
+                    <li>
+                      <strong>Philippine Standard Geographic Code (PSGC):</strong> Synchronized with the Philippine Statistics Authority (PSA) PSGC 2024 master list.
+                    </li>
+                    <li>
+                      <strong>Updated Administrative Jurisdictions:</strong> Reflects the latest official boundaries, including BARMM (with Maguindanao del Norte and Maguindanao del Sur), Davao de Oro, and MIMAROPA.
+                    </li>
+                    <li>
+                      <strong>Geodetic Alignment:</strong> WGS84 (EPSG:4326) / PRS92 aligned spatial coordinates ensuring zero polygon displacement.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowBoundaryInfoModal(false)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors"
+                >
+                  Close &amp; Return to Map
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

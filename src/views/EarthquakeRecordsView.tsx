@@ -18,18 +18,27 @@ import {
   Mail,
   X,
   CheckCircle2,
+  Radio,
+  ExternalLink,
+  Globe,
+  Activity,
 } from 'lucide-react';
 import { EarthquakeRecord } from '../types';
 import {
   getRecordLocationDetails,
   getRecordDateIso,
   isRecordInDateRange,
+  isRecordInCgpAor,
 } from '../utils/earthquakeHelpers';
 
 interface EarthquakeRecordsViewProps {
   records: EarthquakeRecord[];
   initialFilter?: string;
   onSelectRecord: (record: EarthquakeRecord) => void;
+  onRefreshLive?: () => void;
+  isLiveUpdating?: boolean;
+  lastSyncTime?: string;
+  sourceUrl?: string;
 }
 
 type DatePreset = 'ALL' | 'TODAY' | '24H' | '7D' | '30D' | 'THIS_MONTH' | 'CUSTOM';
@@ -38,6 +47,10 @@ export const EarthquakeRecordsView: React.FC<EarthquakeRecordsViewProps> = ({
   records,
   initialFilter = 'ALL',
   onSelectRecord,
+  onRefreshLive,
+  isLiveUpdating = false,
+  lastSyncTime,
+  sourceUrl = 'https://earthquake.phivolcs.dost.gov.ph/',
 }) => {
   // Enriched records with parsed province & municipality
   const enrichedRecords = useMemo(() => {
@@ -162,8 +175,11 @@ export const EarthquakeRecordsView: React.FC<EarthquakeRecordsViewProps> = ({
       // 3. AOR filter
       if (aorFilter === 'Inside AOR' || aorFilter === 'Inside') {
         if (record.aor === 'Outside AOR' || record.aorStatus === 'Outside') return false;
+        if (record.aor === 'CGP' && !isRecordInCgpAor(record)) return false;
       } else if (aorFilter === 'Outside AOR') {
         if (record.aor !== 'Outside AOR' && record.aorStatus !== 'Outside') return false;
+      } else if (aorFilter === 'CGP') {
+        if (record.aor !== 'CGP' || !isRecordInCgpAor(record)) return false;
       } else if (aorFilter !== 'All AOR') {
         if (record.aor !== aorFilter) return false;
       }
@@ -206,7 +222,7 @@ export const EarthquakeRecordsView: React.FC<EarthquakeRecordsViewProps> = ({
   // Overall metric calculations
   const totalCount = records.length;
   const insideAorCount = records.filter(
-    (r) => r.aor !== 'Outside AOR' && r.aorStatus !== 'Outside'
+    (r) => r.aor !== 'Outside AOR' && r.aorStatus !== 'Outside' && (r.aor !== 'CGP' || isRecordInCgpAor(r))
   ).length;
   const alertsSentCount = records.filter((r) => r.status === 'Alert Sent').length;
   const forReviewCount = records.filter((r) => r.status === 'For Review').length;
@@ -410,6 +426,69 @@ export const EarthquakeRecordsView: React.FC<EarthquakeRecordsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Live PHIVOLCS DOST Feed Status & Sync Header */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0 shadow-2xs mt-0.5 sm:mt-0">
+            <Radio className="w-5 h-5 text-blue-600 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-sm text-slate-900">
+                PHIVOLCS DOST Live Earthquake Feed
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+                Live Connected
+              </span>
+              <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                Official Bulletins
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+              <span>
+                Source:{' '}
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:text-blue-800 font-semibold hover:underline inline-flex items-center gap-1 font-mono text-[11px]"
+                >
+                  earthquake.phivolcs.dost.gov.ph
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </span>
+              <span className="text-slate-300">&bull;</span>
+              <span>
+                {lastSyncTime
+                  ? `Last synchronized: ${lastSyncTime} (PST)`
+                  : 'Automatic real-time polling active (60s)'}
+              </span>
+              <span className="text-slate-300">&bull;</span>
+              <span className="font-semibold text-slate-700">
+                {totalCount.toLocaleString()} total seismic bulletins available
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {onRefreshLive && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onRefreshLive}
+              disabled={isLiveUpdating}
+              className="px-3.5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-60"
+            >
+              <RotateCw
+                className={`w-3.5 h-3.5 ${isLiveUpdating ? 'animate-spin' : ''}`}
+              />
+              <span>{isLiveUpdating ? 'Fetching PHIVOLCS...' : 'Pull Updated Bulletins'}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Dynamic Feedback Notice */}
       {feedbackNotice && (
         <div className="bg-blue-50 border border-blue-300 text-blue-800 px-4 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between shadow-xs animate-fadeIn">
@@ -1058,14 +1137,27 @@ export const EarthquakeRecordsView: React.FC<EarthquakeRecordsViewProps> = ({
 
                       {/* Action */}
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => onSelectRecord(record)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
-                          title="View event details"
-                        >
-                          <Eye className="w-4 h-4 text-blue-600" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onSelectRecord(record)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
+                            title="View event details in Alert X"
+                          >
+                            <Eye className="w-4 h-4 text-blue-600" />
+                          </button>
+                          {record.bulletinUrl && (
+                            <a
+                              href={record.bulletinUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors inline-flex items-center justify-center shadow-2xs"
+                              title="Open official bulletin on earthquake.phivolcs.dost.gov.ph"
+                            >
+                              <ExternalLink className="w-4 h-4 text-emerald-600" />
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

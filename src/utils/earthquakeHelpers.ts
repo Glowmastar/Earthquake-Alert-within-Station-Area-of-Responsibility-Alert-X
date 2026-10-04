@@ -84,3 +84,44 @@ export function isRecordInDateRange(
 
   return true;
 }
+
+/**
+ * Approved CGP (Cagayan de Oro Seismic Station) coverage set per Section 2.3 of Operational Ruling:
+ * Strictly limited to the 7 designated territories:
+ * 1. Lanao del Sur
+ * 2. Lanao del Norte
+ * 3. Misamis Oriental
+ * 4. Misamis Occidental
+ * 5. Bukidnon
+ * 6. Cagayan de Oro (host city/independent chartered locality)
+ * 7. Camiguin (including alternate spelling Camuigin)
+ */
+export const CGP_APPROVED_AREAS: readonly string[] = [
+  'bukidnon',
+  'camiguin',
+  'camuigin',
+  'lanao del norte',
+  'lanao del sur',
+  'misamis occidental',
+  'misamis oriental',
+  'cagayan de oro',
+];
+
+export function isRecordInCgpAor(record: EarthquakeRecord): boolean {
+  const loc = (record.location || '').toLowerCase();
+  const prov = (record.province || '').toLowerCase();
+  const muni = (record.municipality || '').toLowerCase();
+  const provMuni = (record.provinceMunicipality || '').toLowerCase();
+
+  // Strictly check against the 7 approved coverage territories only
+  return CGP_APPROVED_AREAS.some(
+    (area) =>
+      prov.includes(area) ||
+      muni.includes(area) ||
+      provMuni.includes(area) ||
+      loc.includes(`(${area})`) ||
+      loc.includes(`of ${area}`) ||
+      loc.includes(area)
+  );
+}
+

@@ -16,7 +16,7 @@ import {
   WifiOff,
   RefreshCw,
 } from 'lucide-react';
-import { UserProfile } from '../types';
+import { UserProfile, PRECONFIGURED_USERS } from '../types';
 import { useRealtimeClock } from '../utils/useRealtimeClock';
 
 interface HeaderProps {
@@ -30,6 +30,7 @@ interface HeaderProps {
   onToggleSidebar?: () => void;
   onToggleMobileSidebar?: () => void;
   onLogout?: () => void;
+  onSwitchUser?: (user: UserProfile) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar,
   onToggleMobileSidebar,
   onLogout,
+  onSwitchUser,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -103,16 +105,16 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div>
             {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-xs font-medium mb-1">
-              <Home className="w-3.5 h-3.5 text-blue-600" />
+            <div className="flex items-center gap-1.5 text-xs font-medium mb-1">
+              <Home className="w-3.5 h-3.5 text-blue-600 shrink-0" />
               {breadcrumbSegments.map((seg, idx) => (
                 <React.Fragment key={seg}>
-                  {idx > 0 && <span className="text-slate-400">/</span>}
+                  {idx > 0 && <span className="text-slate-400 font-normal text-xs select-none">›</span>}
                   <span
                     className={
                       idx === breadcrumbSegments.length - 1
-                        ? 'text-slate-700 font-medium'
-                        : 'text-slate-500 hover:text-blue-600'
+                        ? 'text-blue-600 font-bold'
+                        : 'text-slate-500 hover:text-blue-600 transition-colors'
                     }
                   >
                     {seg}
@@ -248,9 +250,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {/* Avatar circle */}
               <div className={`w-8 h-8 rounded-full text-white font-bold text-xs flex items-center justify-center shadow-xs ${
-                isPcpScoped ? 'bg-blue-600' : 'bg-emerald-600'
+                currentUser?.assignedAor === 'CGP'
+                  ? 'bg-cyan-600'
+                  : currentUser?.assignedAor === 'PCP'
+                  ? 'bg-blue-600'
+                  : 'bg-emerald-600'
               }`}>
-                {isPcpScoped ? 'PCP' : currentUser?.name ? currentUser.name.slice(0, 2).toUpperCase() : 'JD'}
+                {currentUser?.assignedAor && currentUser.assignedAor !== 'ALL'
+                  ? currentUser.assignedAor
+                  : currentUser?.name
+                  ? currentUser.name.slice(0, 2).toUpperCase()
+                  : 'JD'}
               </div>
 
               {/* Name & Role */}
@@ -259,7 +269,13 @@ export const Header: React.FC<HeaderProps> = ({
                   {currentUser?.name || 'Juan Dela Cruz'}
                 </div>
                 <div className="text-[10px] text-slate-500 font-medium">
-                  {currentUser ? `${currentUser.role} • ${currentUser.assignedAor === 'PCP' ? 'PCP AOR' : 'Global'}` : 'System Administrator'}
+                  {currentUser
+                    ? `${currentUser.role} • ${
+                        currentUser.assignedAor && currentUser.assignedAor !== 'ALL'
+                          ? `${currentUser.assignedAor} AOR`
+                          : 'Global'
+                      }`
+                    : 'System Administrator'}
                 </div>
               </div>
 
@@ -281,15 +297,82 @@ export const Header: React.FC<HeaderProps> = ({
                     <Radio className="w-4 h-4 text-blue-600" />
                     <span>Station: <strong>{currentUser?.assignedAor || 'ALL'}</strong></span>
                   </div>
-                  {isPcpScoped && (
+                  {currentUser?.assignedAor && currentUser.assignedAor !== 'ALL' && (
                     <div className="mx-3 my-1 p-2 rounded-lg bg-blue-50 border border-blue-200 text-[10px] text-blue-800">
-                      <strong>Station Restriction Active:</strong> Displaying only earthquakes and recipients within Palayan AOR.
+                      <strong>Station Restriction Active:</strong> Displaying only earthquakes and recipients within {currentUser.stationName || `${currentUser.assignedAor} AOR`}.
                     </div>
                   )}
                   <div className="px-4 py-1.5 flex items-center gap-2 text-slate-600">
                     <CheckCircle2 className="w-4 h-4 text-blue-600" />
                     <span>PHIVOLCS Directory SSO</span>
                   </div>
+
+                  {/* Quick Station Switcher */}
+                  {onSwitchUser && (
+                    <div className="mt-1 pt-1.5 border-t border-slate-100 px-3 pb-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">
+                        Switch Station Account
+                      </div>
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            onSwitchUser(PRECONFIGURED_USERS['cagayanseismicstation@phivolcs.gov.ph']);
+                          }}
+                          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                            currentUser?.assignedAor === 'CGP'
+                              ? 'bg-cyan-50 text-cyan-800 font-bold border border-cyan-200'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="w-2 h-2 rounded-full bg-cyan-600 shrink-0" />
+                            <span className="truncate">Cagayan Seismic Station</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-cyan-700 font-bold ml-1 shrink-0">CGP</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            onSwitchUser(PRECONFIGURED_USERS['palayanz@phivolcs.dost.gov.ph']);
+                          }}
+                          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                            currentUser?.assignedAor === 'PCP'
+                              ? 'bg-blue-50 text-blue-800 font-bold border border-blue-200'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+                            <span className="truncate">Palayan Seismic Station</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-blue-700 font-bold ml-1 shrink-0">PCP</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            onSwitchUser(PRECONFIGURED_USERS['j.delacruz@phivolcs.dost.gov.ph']);
+                          }}
+                          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                            currentUser?.assignedAor === 'ALL'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
+                            <span className="truncate">Central Seismology (Admin)</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-emerald-700 font-bold ml-1 shrink-0">ALL</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="border-t border-slate-100 pt-1 mt-0.5">
                   <button

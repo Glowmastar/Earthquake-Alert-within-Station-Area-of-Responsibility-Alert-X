@@ -32,6 +32,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       return;
     }
 
+    // Cagayan Seismic Station Account validation
+    if (
+      cleanEmail === 'cagayanseismicstation@phivolcs.gov.ph' ||
+      cleanEmail === 'cagayanseismicstation@phivolcs.dost.gov.ph'
+    ) {
+      if (password !== 'cagayanss12345') {
+        showToast('Invalid password for Cagayan Seismic Station account. Expected: cagayanss12345');
+        return;
+      }
+      showToast('Authenticating Cagayan Seismic Station (User Role • CGP AOR)...');
+      setTimeout(() => {
+        onLogin(
+          PRECONFIGURED_USERS[cleanEmail] ||
+          PRECONFIGURED_USERS['cagayanseismicstation@phivolcs.gov.ph']
+        );
+      }, 400);
+      return;
+    }
+
     // Palayan Seismic Station Account validation
     if (cleanEmail === 'palayanz@phivolcs.dost.gov.ph') {
       if (password !== '12345') {
@@ -56,7 +75,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
     // Generic fallback for any other PHIVOLCS email
     const isPcp = cleanEmail.includes('palayan');
-    const userProfile: UserProfile = isPcp
+    const isCgp = cleanEmail.includes('cagayan');
+    const userProfile: UserProfile = isCgp
+      ? PRECONFIGURED_USERS['cagayanseismicstation@phivolcs.gov.ph']
+      : isPcp
       ? PRECONFIGURED_USERS['palayanz@phivolcs.dost.gov.ph']
       : {
           id: `user-${Date.now()}`,
@@ -64,8 +86,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           email: cleanEmail,
           name: cleanEmail.split('@')[0].toUpperCase(),
           role: 'User',
-          assignedAor: 'PCP',
-          stationName: 'PCP - Palayan Seismic Station (Central Luzon)',
+          assignedAor: 'CGP',
+          stationName: 'CGP - Cagayan Seismic Station',
         };
 
     showToast(`Authenticated as ${userProfile.name} (${userProfile.role})`);
@@ -74,8 +96,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     }, 400);
   };
 
-  const handleQuickSelectAccount = (accountKey: 'palayan' | 'admin') => {
-    if (accountKey === 'palayan') {
+  const handleQuickSelectAccount = (accountKey: 'cagayan' | 'palayan' | 'admin') => {
+    if (accountKey === 'cagayan') {
+      setEmail('cagayanseismicstation@phivolcs.gov.ph');
+      setPassword('cagayanss12345');
+      showToast('Populated credentials for Cagayan Seismic Station account (CGP AOR).');
+    } else if (accountKey === 'palayan') {
       setEmail('palayanz@phivolcs.dost.gov.ph');
       setPassword('12345');
       showToast('Populated credentials for Palayan Seismic Station account (PCP AOR).');
@@ -240,37 +266,53 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
               Quick Switch Account:
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleQuickSelectAccount('cagayan')}
+                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
+                  email.includes('cagayanseismicstation')
+                    ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
+                  <span className="font-bold text-[11px] truncate">Cagayan Stn</span>
+                </div>
+                <span className="text-[9px] text-slate-500 truncate">User &bull; CGP AOR</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => handleQuickSelectAccount('palayan')}
-                className={`text-left p-2 rounded-lg border transition-all text-xs flex items-center gap-2 ${
+                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
                   email === 'palayanz@phivolcs.dost.gov.ph'
                     ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-                <div className="truncate">
-                  <span className="font-bold block text-[11px] truncate">Palayan Station</span>
-                  <span className="text-[9px] text-slate-500 block truncate">User &bull; PCP AOR</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+                  <span className="font-bold text-[11px] truncate">Palayan Stn</span>
                 </div>
+                <span className="text-[9px] text-slate-500 truncate">User &bull; PCP AOR</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleQuickSelectAccount('admin')}
-                className={`text-left p-2 rounded-lg border transition-all text-xs flex items-center gap-2 ${
+                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
                   email === 'j.delacruz@phivolcs.dost.gov.ph'
                     ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
-                <div className="truncate">
-                  <span className="font-bold block text-[11px] truncate">Administrator</span>
-                  <span className="text-[9px] text-slate-500 block truncate">Admin &bull; Global</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
+                  <span className="font-bold text-[11px] truncate">Admin</span>
                 </div>
+                <span className="text-[9px] text-slate-500 truncate">Admin &bull; Global</span>
               </button>
             </div>
           </div>

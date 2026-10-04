@@ -17,6 +17,7 @@ import {
   Mail,
   Settings as SettingsIcon,
   PanelLeftClose,
+  LogOut,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -32,6 +33,7 @@ interface SidebarProps {
   onCloseMobile?: () => void;
   isHidden?: boolean;
   onToggleHide?: () => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -45,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   isHidden = false,
   onToggleHide,
+  onLogout,
 }) => {
   const [recordsExpanded, setRecordsExpanded] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(true);
@@ -140,17 +143,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* Station Scope Banner (when PCP scoped) */}
-          {currentUser?.assignedAor === 'PCP' && (
+          {/* Station Scope Banner (when station scoped) */}
+          {currentUser?.assignedAor && currentUser.assignedAor !== 'ALL' && (
             <div className="mt-3.5 p-2.5 rounded-xl bg-blue-950/80 border border-blue-700/60 shadow-inner">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
                 <div className="min-w-0 flex-1">
                   <span className="font-bold text-white text-[11px] block truncate">
-                    Palayan Station (PCP)
+                    {currentUser.stationName ? currentUser.stationName.split('(')[0].trim() : `${currentUser.name} (${currentUser.assignedAor})`}
                   </span>
                   <span className="text-[9px] text-cyan-300 block truncate">
-                    User Role &bull; Scoped to PCP AOR
+                    {currentUser.role} Role &bull; Scoped to {currentUser.assignedAor} AOR
                   </span>
                 </div>
               </div>
@@ -231,22 +234,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   />
                   <span>All Records</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('records', 'NEW')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentFilter === 'NEW' && isRecordsView
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentFilter === 'NEW' && isRecordsView ? 'bg-white' : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>New Records</span>
                 </button>
                 <button
                   type="button"
@@ -668,13 +655,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  handleNavigate('settings', 'ROLES');
+                  handleNavigate('settings', 'GENERAL');
                   setAdminExpanded(true);
                 }}
-                className="flex items-center gap-3 flex-1 text-left focus:outline-none"
-                title="Go to Administration"
+                className="flex items-center gap-3 flex-1 text-left focus:outline-none cursor-pointer"
+                title="Go to Administration Settings"
               >
-                <Shield className="w-4 h-4 shrink-0" />
+                <SettingsIcon className="w-4 h-4 shrink-0" />
                 <span>Administration</span>
               </button>
               <button
@@ -742,21 +729,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
-                  <IdCard className="w-3.5 h-3.5 shrink-0" />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentView === 'roles' || (currentView === 'settings' && currentFilter === 'ROLES')
+                        ? 'bg-white'
+                        : 'bg-slate-400'
+                    }`}
+                  />
                   <span>Roles</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleNavigate('settings', 'GENERAL')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'settings' && currentFilter === 'GENERAL'
+                    currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'settings' && currentFilter === 'GENERAL'
+                      currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
                         ? 'bg-white'
                         : 'bg-slate-400'
                     }`}
@@ -785,6 +778,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <kbd className="text-[10px] font-mono text-slate-400 bg-slate-950/70 px-1.5 py-0.5 rounded border border-slate-700/60">
               Ctrl+B
             </kbd>
+          </button>
+        </div>
+      )}
+
+      {/* Logout Button on Lower Left under Hide Sidebar */}
+      {onLogout && (
+        <div className="px-3 mb-2">
+          <button
+            type="button"
+            onClick={onLogout}
+            className="w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs font-semibold text-rose-400 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 hover:border-rose-700/70 transition-all group cursor-pointer shadow-2xs"
+            title="Log out of system"
+          >
+            <div className="flex items-center gap-2">
+              <LogOut className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors shrink-0" />
+              <span>Logout</span>
+            </div>
+            <span className="text-[10px] text-rose-400/80 group-hover:text-rose-200 font-medium">
+              Sign out
+            </span>
           </button>
         </div>
       )}

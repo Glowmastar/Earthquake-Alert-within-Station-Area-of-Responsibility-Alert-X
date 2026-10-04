@@ -1,10 +1,10 @@
 node_modules/
 build/
 dist/
-server.js
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+server.js
 firebase-applet-config.json

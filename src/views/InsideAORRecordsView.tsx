@@ -17,28 +17,57 @@ import {
   FileSpreadsheet,
   CheckCircle2,
 } from 'lucide-react';
-import { EarthquakeRecord } from '../types';
+import { EarthquakeRecord, UserProfile } from '../types';
 import {
   getRecordLocationDetails,
   getRecordDateIso,
   isRecordInDateRange,
+  isRecordInCgpAor,
 } from '../utils/earthquakeHelpers';
 
 interface InsideAORRecordsViewProps {
   records: EarthquakeRecord[];
+  currentUser?: UserProfile;
   onSelectRecord: (record: EarthquakeRecord) => void;
   onOpenMap?: () => void;
 }
 
+// Official territories and provinces exclusively monitored under CGP Station (Northern Mindanao)
+export const CGP_AOR_PROVINCES: readonly string[] = [
+  'Lanao del Sur',
+  'Lanao del Norte',
+  'Misamis Oriental',
+  'Misamis Occidental',
+  'Bukidnon',
+  'Cagayan de Oro',
+  'Camiguin',
+];
+
+export const isCgpAorRecord = (r: EarthquakeRecord): boolean => {
+  if (r.aor !== 'CGP') return false;
+  return isRecordInCgpAor(r);
+};
+
 export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
   records,
+  currentUser,
   onSelectRecord,
   onOpenMap,
 }) => {
+  const isCgpScoped = currentUser?.assignedAor === 'CGP';
+  const isPcpScoped = currentUser?.assignedAor === 'PCP';
+  const isStationScoped = Boolean(currentUser?.assignedAor && currentUser.assignedAor !== 'ALL');
+
   // Only inside AOR records with enriched location & date
   const insideRecords = useMemo(() => {
     return records
-      .filter((r) => r.aor !== 'Outside AOR' && r.aorStatus !== 'Outside')
+      .filter((r) => {
+        if (r.aor === 'Outside AOR' || r.aorStatus === 'Outside') return false;
+        if (r.aor === 'CGP') return isCgpAorRecord(r);
+        if (isCgpScoped) return isCgpAorRecord(r);
+        if (isPcpScoped) return r.aor === 'PCP';
+        return true;
+      })
       .map((r) => {
         const loc = getRecordLocationDetails(r);
         return {
@@ -48,7 +77,7 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
           date: r.date || getRecordDateIso(r),
         };
       });
-  }, [records]);
+  }, [records, isCgpScoped, isPcpScoped]);
 
   const [selectedRecordId, setSelectedRecordId] = useState<string>('');
 
@@ -68,7 +97,20 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const datePickerRef = useRef<HTMLDivElement>(null);
 
-  const [stationFilter, setStationFilter] = useState('All Stations');
+  const [stationFilter, setStationFilter] = useState(() => {
+    if (currentUser?.assignedAor === 'CGP') return 'CGP';
+    if (currentUser?.assignedAor === 'PCP') return 'PCP';
+    return 'All Stations';
+  });
+
+  useEffect(() => {
+    if (currentUser?.assignedAor === 'CGP') {
+      setStationFilter('CGP');
+    } else if (currentUser?.assignedAor === 'PCP') {
+      setStationFilter('PCP');
+    }
+  }, [currentUser?.assignedAor]);
+
   const [provinceFilter, setProvinceFilter] = useState('All Provinces');
   const [municipalityFilter, setMunicipalityFilter] = useState('All Municipalities/Cities');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
@@ -87,19 +129,33 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
 
   // Distinct provinces & municipalities for dropdowns
   const provinces = useMemo(() => {
+    if (isCgpScoped || stationFilter.startsWith('CGP')) {
+      return [
+        'Bukidnon',
+        'Cagayan de Oro',
+        'Camiguin',
+        'Lanao del Norte',
+        'Lanao del Sur',
+        'Misamis Occidental',
+        'Misamis Oriental',
+      ];
+    }
     const set = new Set<string>();
     insideRecords.forEach((r) => {
       if (r.province && r.province !== 'Unspecified') set.add(r.province);
     });
     return Array.from(set).sort();
-  }, [insideRecords]);
+  }, [insideRecords, isCgpScoped, stationFilter]);
 
   const municipalities = useMemo(() => {
     const set = new Set<string>();
     insideRecords.forEach((r) => {
+      const pFilter = provinceFilter.toLowerCase();
       if (
         provinceFilter === 'All Provinces' ||
-        r.province?.toLowerCase() === provinceFilter.toLowerCase()
+        r.province?.toLowerCase() === pFilter ||
+        r.municipality?.toLowerCase() === pFilter ||
+        r.location.toLowerCase().includes(pFilter)
       ) {
         if (r.municipality && r.municipality !== 'Unspecified') set.add(r.municipality);
       }
@@ -190,14 +246,22 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
       if (stationFilter !== 'All Stations') {
         if (stationFilter.startsWith('PCP') && record.aor !== 'PCP') return false;
         if (stationFilter.startsWith('BIP') && record.aor !== 'BIP') return false;
-        if (stationFilter.startsWith('CGP') && record.aor !== 'CGP') return false;
+        if (stationFilter.startsWith('CGP')) {
+          if (!isCgpAorRecord(record)) return false;
+        }
       }
 
-      // Province
+      // Province / Designated Territory (e.g. Cagayan de Oro)
       if (provinceFilter !== 'All Provinces') {
+        const pFilter = provinceFilter.toLowerCase();
+        const provLower = record.province?.toLowerCase() || '';
+        const muniLower = record.municipality?.toLowerCase() || '';
+        const locLower = record.location.toLowerCase();
         const matchProv =
-          record.province?.toLowerCase() === provinceFilter.toLowerCase() ||
-          record.location.toLowerCase().includes(provinceFilter.toLowerCase());
+          provLower === pFilter ||
+          muniLower === pFilter ||
+          locLower.includes(pFilter) ||
+          (pFilter === 'camiguin' && (provLower.includes('camuigin') || locLower.includes('camuigin')));
         if (!matchProv) return false;
       }
 
@@ -238,7 +302,7 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
     setStartDate('');
     setEndDate('');
     setIsDatePickerOpen(false);
-    setStationFilter('All Stations');
+    setStationFilter(isCgpScoped ? 'CGP' : isPcpScoped ? 'PCP' : 'All Stations');
     setProvinceFilter('All Provinces');
     setMunicipalityFilter('All Municipalities/Cities');
     setStatusFilter('All Statuses');
@@ -435,15 +499,57 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
               Stations Involved
             </span>
             <div className="text-3xl font-black text-indigo-900 tracking-tight mt-0.5">
-              {stationsCount || 3}
+              {isStationScoped ? 1 : stationsCount || 3}
             </div>
-            <span className="text-[11px] text-slate-500 font-normal">PCP, BIP, CGP</span>
+            <span className="text-[11px] text-slate-500 font-normal">
+              {isCgpScoped
+                ? 'CGP (Cagayan Seismic Station)'
+                : isPcpScoped
+                ? 'PCP (Palayan Station)'
+                : 'PCP, BIP, CGP'}
+            </span>
           </div>
         </div>
       </div>
 
+      {/* Station Scope Notice Banner for CGP Account */}
+      {(isCgpScoped || stationFilter.startsWith('CGP')) && (
+        <div className="bg-cyan-50/90 border border-cyan-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 text-xs text-cyan-950 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-600 animate-pulse shrink-0" />
+            <div>
+              <span className="font-bold text-cyan-950">Active Station Scope (CGP AOR):</span>{' '}
+              <span>
+                Displaying earthquake records exclusively within <strong>CGP - Cagayan Seismic Station</strong> Area of Responsibility: <strong>Lanao del Sur, Lanao del Norte, Misamis Oriental, Misamis Occidental, Bukidnon, Cagayan de Oro, and Camiguin</strong>.
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono font-bold bg-cyan-100 text-cyan-800 px-2.5 py-0.5 rounded border border-cyan-300 shrink-0 ml-2">
+            CGP Records Only
+          </span>
+        </div>
+      )}
+
+      {/* Station Scope Notice Banner for PCP Account */}
+      {isPcpScoped && (
+        <div className="bg-blue-50/90 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 text-xs text-blue-950 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
+            <div>
+              <span className="font-bold text-blue-950">Active Station Scope (PCP AOR):</span>{' '}
+              <span>
+                Displaying earthquake records exclusively within <strong>PCP - Palayan Seismic Station</strong> Area of Responsibility (Central Luzon).
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono font-bold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded border border-blue-300 shrink-0 ml-2">
+            PCP Records Only
+          </span>
+        </div>
+      )}
+
       {/* 2. Info Banner with Close button */}
-      {showInfoBanner && (
+      {showInfoBanner && !isStationScoped && (
         <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-blue-800">
           <div className="flex items-center gap-2.5">
             <div className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
@@ -673,12 +779,23 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
               <select
                 value={stationFilter}
                 onChange={(e) => setStationFilter(e.target.value)}
-                className="w-full appearance-none px-3 py-2 pr-7 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-medium text-slate-700"
+                disabled={isStationScoped}
+                className={`w-full appearance-none px-3 py-2 pr-7 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-medium text-slate-700 ${
+                  isStationScoped ? 'opacity-85 cursor-not-allowed bg-slate-50' : ''
+                }`}
               >
-                <option value="All Stations">All Stations</option>
-                <option value="PCP">PCP (Palayan)</option>
-                <option value="BIP">BIP (Bislig)</option>
-                <option value="CGP">CGP (Cagayan de Oro)</option>
+                {isCgpScoped ? (
+                  <option value="CGP">CGP (Cagayan Seismic Station)</option>
+                ) : isPcpScoped ? (
+                  <option value="PCP">PCP (Palayan Seismic Station)</option>
+                ) : (
+                  <>
+                    <option value="All Stations">All Stations</option>
+                    <option value="CGP">CGP (Cagayan Seismic Station)</option>
+                    <option value="PCP">PCP (Palayan)</option>
+                    <option value="BIP">BIP (Bislig)</option>
+                  </>
+                )}
               </select>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>

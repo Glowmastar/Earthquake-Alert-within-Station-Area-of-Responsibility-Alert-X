@@ -31,9 +31,11 @@ import { AORRulesView } from './views/AORRulesView';
 import { RolesView } from './views/RolesView';
 import { LoginView } from './views/LoginView';
 import { EmailDesignTemplateView } from './views/EmailDesignTemplateView';
+import { AdministrationSettingsView } from './views/AdministrationSettingsView';
 
 import { INITIAL_EARTHQUAKES, INITIAL_RECIPIENTS } from './data/mockData';
 import { EarthquakeRecord, Recipient, UserProfile, PRECONFIGURED_USERS } from './types';
+import { isRecordInCgpAor } from './utils/earthquakeHelpers';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
@@ -43,6 +45,9 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (parsed?.email === 'j.delacruz@phivolcs.dost.gov.ph') {
           return PRECONFIGURED_USERS['j.delacruz@phivolcs.dost.gov.ph'];
+        }
+        if (parsed?.email === 'cagayanseismicstation@phivolcs.gov.ph' || parsed?.email === 'cagayanseismicstation@phivolcs.dost.gov.ph') {
+          return PRECONFIGURED_USERS['cagayanseismicstation@phivolcs.gov.ph'];
         }
         if (parsed?.email === 'palayanz@phivolcs.dost.gov.ph') {
           return PRECONFIGURED_USERS['palayanz@phivolcs.dost.gov.ph'];
@@ -59,10 +64,10 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('alertx_auth') !== 'false';
   });
-  const [currentView, setCurrentView] = useState<string>('email');
+  const [currentView, setCurrentView] = useState<string>('settings');
   const [recordFilter, setRecordFilter] = useState<string>('INSIDE_AOR');
   const [mapSubView, setMapSubView] = useState<'STATION_BOUNDARIES' | 'BOUNDARY_REVIEW'>('BOUNDARY_REVIEW');
-  const [settingsSubView, setSettingsSubView] = useState<'AOR_RULES' | 'EQINFO_SOURCE' | 'ROLES'>('ROLES');
+  const [settingsSubView, setSettingsSubView] = useState<'GENERAL' | 'AOR_RULES' | 'EQINFO_SOURCE' | 'ROLES'>('GENERAL');
   const [exceptionFilter, setExceptionFilter] = useState<string>('ALL');
 
   // Main State
@@ -70,6 +75,8 @@ export default function App() {
   const [recipients, setRecipients] = useState<Recipient[]>(INITIAL_RECIPIENTS);
   const [selectedEarthquake, setSelectedEarthquake] = useState<EarthquakeRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isFetchingLive, setIsFetchingLive] = useState<boolean>(false);
+  const [lastLiveSyncTime, setLastLiveSyncTime] = useState<string>('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(() => {
     return localStorage.getItem('alertx_sidebar_hidden') === 'true';
@@ -107,9 +114,12 @@ export default function App() {
     }
   };
 
-  // Scoped Earthquakes: When logged in as Palayan Seismic Station (PCP), ONLY display AOR within PCP!
+  // Scoped Earthquakes: When logged in as CGP or PCP station, ONLY display AOR within station!
   const scopedEarthquakes = useMemo(() => {
     if (currentUser?.assignedAor && currentUser.assignedAor !== 'ALL') {
+      if (currentUser.assignedAor === 'CGP') {
+        return earthquakes.filter((eq) => eq.aor === 'CGP' && isRecordInCgpAor(eq));
+      }
       return earthquakes.filter((eq) => eq.aor === currentUser.assignedAor);
     }
     return earthquakes;
@@ -160,29 +170,50 @@ export default function App() {
     showToast(`New recipient ${newRec.name} added to ${newRec.aor} sector.`);
   };
 
-  const fetchLivePhivolcsData = async (silent: boolean = false) => {
+  const fetchLivePhivolcsData = async (force: boolean = false, silent: boolean = false) => {
+    setIsFetchingLive(true);
     try {
-      const res = await fetch('/api/phivolcs-earthquakes');
+      const url = force ? '/api/phivolcs-earthquakes?refresh=true' : '/api/phivolcs-earthquakes';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (data.records && data.records.length > 0) {
           setEarthquakes(data.records);
+          const nowFormatted = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          }).format(new Date());
+          setLastLiveSyncTime(nowFormatted);
           if (!silent) {
-            showToast(`Synchronized ${data.records.length} live earthquakes from earthquake.phivolcs.dost.gov.ph`);
+            showToast(`Synchronized ${data.records.length.toLocaleString()} updated earthquakes from earthquake.phivolcs.dost.gov.ph (${nowFormatted} PST)`);
           }
         }
       }
     } catch (err) {
       console.error('Failed to fetch PHIVOLCS live data:', err);
+      if (!silent) {
+        showToast('Connection to earthquake.phivolcs.dost.gov.ph timed out. Showing cached records.');
+      }
+    } finally {
+      setIsFetchingLive(false);
     }
   };
 
   useEffect(() => {
-    fetchLivePhivolcsData(true);
+    fetchLivePhivolcsData(false, true);
+
+    // Periodic polling every 60 seconds for updated and timely bulletins from PHIVOLCS
+    const pollTimer = setInterval(() => {
+      fetchLivePhivolcsData(false, true);
+    }, 60000);
+
+    return () => clearInterval(pollTimer);
   }, []);
 
   const handleRefreshData = () => {
-    fetchLivePhivolcsData(false);
+    fetchLivePhivolcsData(true, false);
   };
 
   const handleRunAorCheck = () => {
@@ -248,10 +279,10 @@ export default function App() {
         setExceptionFilter('ALL');
       }
     } else if (view === 'settings') {
-      if (filter === 'EQINFO_SOURCE' || filter === 'AOR_RULES' || filter === 'ROLES') {
+      if (filter === 'EQINFO_SOURCE' || filter === 'AOR_RULES' || filter === 'ROLES' || filter === 'GENERAL') {
         setSettingsSubView(filter);
       } else {
-        setSettingsSubView('ROLES');
+        setSettingsSubView('GENERAL');
       }
     } else if (view === 'roles') {
       setCurrentView('settings');
@@ -343,8 +374,8 @@ export default function App() {
         };
       case 'social-media':
         return {
-          title: 'Social Media',
-          subtitle: 'Prepare, review, approve, and publish earthquake-intensity updates for official social-media channels',
+          title: 'Social Media Intensity Harvester',
+          subtitle: 'Harvest, extract, and verify citizen earthquake-intensity reports from comments on PHIVOLCS Facebook and Twitter (X) posts',
           breadcrumb: 'Intensity Reports / Social Media',
           titleClassName: 'text-2xl font-black text-blue-600 tracking-tight leading-tight',
           subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
@@ -366,11 +397,20 @@ export default function App() {
           subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
         };
       case 'settings':
+        if (settingsSubView === 'GENERAL') {
+          return {
+            title: 'Administration Settings',
+            subtitle: 'Manage system preferences and station-level defaults',
+            breadcrumb: 'Dashboard / Administration / Settings',
+            titleClassName: 'text-2xl font-bold text-slate-900 tracking-tight leading-tight',
+            subtitleClassName: 'text-xs text-slate-500 font-normal mt-0.5',
+          };
+        }
         if (settingsSubView === 'ROLES') {
           return {
             title: 'Roles & Permissions',
             subtitle: 'Manage capability-based access and station-scoped permissions',
-            breadcrumb: 'Administration / Roles',
+            breadcrumb: 'Dashboard / Administration / Roles',
             titleClassName: 'text-2xl font-bold text-blue-600 tracking-tight leading-tight',
             subtitleClassName: 'text-xs text-blue-500 font-normal mt-0.5',
           };
@@ -379,7 +419,7 @@ export default function App() {
           return {
             title: 'AOR Rules',
             subtitle: 'Configure geographic classification, alert decisions, boundary handling, and station assignment rules',
-            breadcrumb: 'Administration / AOR Rules',
+            breadcrumb: 'Dashboard / Administration / AOR Rules',
             titleClassName: 'text-2xl font-black text-blue-700 tracking-tight leading-tight',
             subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
           };
@@ -387,7 +427,7 @@ export default function App() {
         return {
           title: 'EQInfo Source',
           subtitle: 'Manage earthquake data source connection and synchronization',
-          breadcrumb: 'Administration / EQInfo Source',
+          breadcrumb: 'Dashboard / Administration / EQInfo Source',
           titleClassName: 'text-2xl font-bold text-blue-600 tracking-tight leading-tight',
           subtitleClassName: 'text-xs text-blue-500 font-normal mt-0.5',
         };
@@ -446,8 +486,8 @@ export default function App() {
           localStorage.setItem('alertx_current_user', JSON.stringify(user));
           showToast(
             `Welcome, ${user.name}! ${
-              user.assignedAor === 'PCP'
-                ? 'Portal scoped exclusively to Palayan AOR (PCP).'
+              user.assignedAor && user.assignedAor !== 'ALL'
+                ? `Portal scoped exclusively to ${user.name} (${user.assignedAor} AOR).`
                 : 'Central administrator access active.'
             }`
           );
@@ -455,6 +495,12 @@ export default function App() {
       />
     );
   }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.setItem('alertx_auth', 'false');
+    showToast('You have been logged out.');
+  };
 
   return (
     <div className="flex h-screen bg-[#f8fafc] overflow-hidden font-sans antialiased text-slate-800">
@@ -494,6 +540,7 @@ export default function App() {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         isHidden={isSidebarHidden}
         onToggleHide={handleToggleSidebar}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -502,8 +549,8 @@ export default function App() {
         <Header
           title={headerInfo.title}
           subtitle={
-            currentUser.assignedAor === 'PCP'
-              ? `${headerInfo.subtitle} • Scoped to Palayan Station (PCP AOR)`
+            currentUser.assignedAor && currentUser.assignedAor !== 'ALL'
+              ? `${headerInfo.subtitle} • Scoped to ${currentUser.stationName ? currentUser.stationName.split('(')[0].trim() : currentUser.name} (${currentUser.assignedAor} AOR)`
               : headerInfo.subtitle
           }
           breadcrumb={headerInfo.breadcrumb}
@@ -513,26 +560,27 @@ export default function App() {
           isSidebarHidden={isSidebarHidden}
           onToggleSidebar={handleToggleSidebar}
           onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
-          onLogout={() => {
-            setIsAuthenticated(false);
-            localStorage.setItem('alertx_auth', 'false');
-            showToast('You have been logged out.');
+          onLogout={handleLogout}
+          onSwitchUser={(user) => {
+            setCurrentUser(user);
+            localStorage.setItem('alertx_current_user', JSON.stringify(user));
+            showToast(`Switched account to ${user.name} (${user.assignedAor} AOR).`);
           }}
         />
 
         {/* Scrollable Viewport */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-          {/* Station Restriction Notice Banner if logged in as Palayan Station */}
-          {currentUser.assignedAor === 'PCP' && (
+          {/* Station Restriction Notice Banner if logged in as a scoped station on Dashboard */}
+          {currentView === 'dashboard' && currentUser.assignedAor && currentUser.assignedAor !== 'ALL' && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between text-xs text-blue-900 shadow-2xs">
               <div className="flex items-center gap-2.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
                 <span>
-                  <strong>Station View Active:</strong> You are logged in with the <strong>Palayan Seismic Station</strong> user account (<code>{currentUser.email}</code>). Only earthquake records, alerts, and recipients within the <strong>PCP AOR</strong> are displayed.
+                  <strong>Station View Active:</strong> You are logged in with the <strong>{currentUser.name}</strong> user account (<code>{currentUser.email}</code>). Only earthquake records, alerts, and recipients within the <strong>{currentUser.assignedAor} AOR</strong> are displayed.
                 </span>
               </div>
               <span className="text-[11px] font-mono font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded border border-blue-300 shrink-0 ml-2">
-                PCP AOR Only
+                {currentUser.assignedAor} AOR Only
               </span>
             </div>
           )}
@@ -562,9 +610,14 @@ export default function App() {
                 <div className="lg:col-span-7 flex flex-col min-h-[580px]">
                   <PhilippinesMap
                     earthquakes={scopedEarthquakes}
+                    currentUser={currentUser}
                     onSelectEarthquake={setSelectedEarthquake}
                     selectedEarthquake={selectedEarthquake}
-                    selectedAorFilter={currentUser.assignedAor === 'PCP' ? 'PCP' : 'ALL'}
+                    selectedAorFilter={
+                      currentUser.assignedAor === 'PCP' || currentUser.assignedAor === 'CGP' || currentUser.assignedAor === 'BIP'
+                        ? currentUser.assignedAor
+                        : 'ALL'
+                    }
                   />
                 </div>
 
@@ -592,6 +645,7 @@ export default function App() {
             recordFilter === 'INSIDE_AOR' ? (
               <InsideAORRecordsView
                 records={scopedEarthquakes}
+                currentUser={currentUser}
                 onSelectRecord={setSelectedEarthquake}
                 onOpenMap={() => navigateTo('map')}
               />
@@ -603,9 +657,13 @@ export default function App() {
               />
             ) : (
               <EarthquakeRecordsView
-                records={scopedEarthquakes}
+                records={earthquakes}
                 initialFilter={recordFilter}
                 onSelectRecord={setSelectedEarthquake}
+                onRefreshLive={() => fetchLivePhivolcsData(true, false)}
+                isLiveUpdating={isFetchingLive}
+                lastSyncTime={lastLiveSyncTime}
+                sourceUrl="https://earthquake.phivolcs.dost.gov.ph/"
               />
             )
           )}
@@ -670,6 +728,7 @@ export default function App() {
 
           {currentView === 'social-media' && (
             <SocialMediaView
+              currentUser={currentUser}
               onNavigateToFieldReports={() => setCurrentView('intensity-field')}
               onNavigateToConsolidator={() => setCurrentView('intensity')}
             />
@@ -694,7 +753,13 @@ export default function App() {
           )}
 
           {currentView === 'settings' && (
-            settingsSubView === 'ROLES' ? (
+            settingsSubView === 'GENERAL' ? (
+              <AdministrationSettingsView
+                currentUser={currentUser}
+                onShowToast={showToast}
+                onNavigateToAudit={() => navigateTo('audit')}
+              />
+            ) : settingsSubView === 'ROLES' ? (
               <RolesView onNavigateToAudit={() => navigateTo('audit')} />
             ) : settingsSubView === 'AOR_RULES' ? (
               <AORRulesView currentUser={currentUser} />
