@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Users,
   Mail,
@@ -17,6 +17,11 @@ import {
   Check,
   Ban,
   Download,
+  Trash2,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
+  FileText,
 } from 'lucide-react';
 
 export type RecipientRole = 'Station Personnel' | 'Administrative Recipient';
@@ -37,6 +42,10 @@ export interface RecipientRecord {
   accountStatus: AccountStatus;
   lastVerified: string;
   lastAlertSent: string;
+  firstName?: string;
+  lastName?: string;
+  middleInitial?: string;
+  coveredAreas?: string;
 }
 
 const INITIAL_RECIPIENTS: RecipientRecord[] = [
@@ -115,10 +124,34 @@ const INITIAL_RECIPIENTS: RecipientRecord[] = [
 interface RecipientsViewProps {
   recipients?: any[];
   onAddRecipient?: (recipient: any) => void;
+  onDeleteRecipient?: (recipientId: string) => void;
 }
 
-export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: _onAddRecipient }) => {
-  const [recipients, setRecipients] = useState<RecipientRecord[]>(INITIAL_RECIPIENTS);
+export const RecipientsView: React.FC<RecipientsViewProps> = ({
+  onAddRecipient: _onAddRecipient,
+  onDeleteRecipient,
+}) => {
+  const [recipients, setRecipients] = useState<RecipientRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('alertx_recipients_records');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_RECIPIENTS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('alertx_recipients_records', JSON.stringify(recipients));
+    } catch {
+      // ignore
+    }
+  }, [recipients]);
+
   const [selectedId, setSelectedId] = useState<string>('REC-001');
   const [bannerVisible, setBannerVisible] = useState<boolean>(true);
 
@@ -133,6 +166,8 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [recipientToDelete, setRecipientToDelete] = useState<RecipientRecord | null>(null);
 
   // Form State for Add / Edit
   const [formStationCode, setFormStationCode] = useState('PCP');
@@ -153,6 +188,260 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
   const selectedRecipient = useMemo(() => {
     return recipients.find((r) => r.id === selectedId) || recipients[0];
   }, [recipients, selectedId]);
+
+  const openDeleteModal = (recipient: RecipientRecord) => {
+    setRecipientToDelete(recipient);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!recipientToDelete) return;
+    const deletedName = recipientToDelete.recipientName;
+    const deletedId = recipientToDelete.id;
+
+    setRecipients((prev) => {
+      const updated = prev.filter((r) => r.id !== deletedId);
+      if (selectedId === deletedId) {
+        setSelectedId(updated.length > 0 ? updated[0].id : '');
+      }
+      return updated;
+    });
+
+    onDeleteRecipient?.(deletedId);
+    setIsDeleteModalOpen(false);
+    setRecipientToDelete(null);
+    showNotification(`Recipient "${deletedName}" has been deleted.`);
+  };
+
+  // CSV Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [parsedCsvRecords, setParsedCsvRecords] = useState<RecipientRecord[]>([]);
+  const [csvFileName, setCsvFileName] = useState<string>('');
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [isParsingCsv, setIsParsingCsv] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Template Downloader with exact required headers
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'First Name',
+      'Last Name',
+      'Middle Initial',
+      'Email Address',
+      'Contact Number',
+      'Station Name',
+      'AOR Provinces / Covered Areas',
+    ];
+    const sampleRows = [
+      [
+        '"Wilmer"',
+        '"Legaspi"',
+        '"A"',
+        '"wilmer.legaspi@phivolcs.gov.ph"',
+        '"0917 123 4567"',
+        '"Palayan Seismic Station"',
+        '"Nueva Ecija, Aurora, Bulacan"',
+      ],
+      [
+        '"Mark Louegie"',
+        '"Juarbal"',
+        '""',
+        '"mark.juarbal@phivolcs.gov.ph"',
+        '"0920 555 0101"',
+        '"Cagayan de Oro Seismic Station"',
+        '"Misamis Oriental, Bukidnon, Camiguin"',
+      ],
+      [
+        '"Evelyn"',
+        '"Seranado"',
+        '"B"',
+        '"evelyn.seranado@phivolcs.gov.ph"',
+        '"0918 765 4321"',
+        '"Bislig Seismic Station"',
+        '"Surigao del Sur, Agusan del Sur"',
+      ],
+    ];
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...sampleRows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'Recipients_Import_Template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification('Recipients CSV import template downloaded.');
+  };
+
+  // CSV Parser with support for quoted strings and flexible column mapping
+  const parseCsvText = (text: string, filename: string) => {
+    setIsParsingCsv(true);
+    setCsvError(null);
+    try {
+      const lines = text.split(/\r\n|\n/).filter((l) => l.trim().length > 0);
+      if (lines.length < 2) {
+        setCsvError('The CSV file does not contain any data rows.');
+        setIsParsingCsv(false);
+        return;
+      }
+
+      // Robust CSV tokenizer
+      const parseLine = (line: string): string[] => {
+        const tokens: string[] = [];
+        let curr = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              curr += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            tokens.push(curr.trim());
+            curr = '';
+          } else {
+            curr += char;
+          }
+        }
+        tokens.push(curr.trim());
+        return tokens;
+      };
+
+      const rawHeaders = parseLine(lines[0]);
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      // Identify column indices
+      const colFirst = rawHeaders.findIndex((h) => norm(h).includes('firstname') || norm(h) === 'first');
+      const colLast = rawHeaders.findIndex((h) => norm(h).includes('lastname') || norm(h) === 'last');
+      const colMi = rawHeaders.findIndex(
+        (h) => norm(h).includes('middleinitial') || norm(h) === 'mi' || norm(h) === 'middle'
+      );
+      const colEmail = rawHeaders.findIndex((h) => norm(h).includes('email'));
+      const colContact = rawHeaders.findIndex(
+        (h) => norm(h).includes('contact') || norm(h).includes('phone') || norm(h).includes('number')
+      );
+      const colStation = rawHeaders.findIndex((h) => norm(h).includes('station'));
+      const colAreas = rawHeaders.findIndex(
+        (h) => norm(h).includes('aor') || norm(h).includes('province') || norm(h).includes('covered')
+      );
+
+      if (colEmail === -1 && colLast === -1 && colFirst === -1) {
+        setCsvError(
+          'Missing required headers. File must contain "First Name", "Last Name", "Email Address", "Contact Number", "Station Name", "AOR Provinces / Covered Areas".'
+        );
+        setIsParsingCsv(false);
+        return;
+      }
+
+      const parsed: RecipientRecord[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const row = parseLine(lines[i]);
+        if (row.length === 0 || row.every((c) => !c.trim())) continue;
+
+        const firstName = colFirst !== -1 ? (row[colFirst] || '').trim() : '';
+        const lastName = colLast !== -1 ? (row[colLast] || '').trim() : '';
+        const mi = colMi !== -1 ? (row[colMi] || '').trim().replace(/\.$/, '') : '';
+        const email = colEmail !== -1 ? (row[colEmail] || '').trim() : '';
+        const contact = colContact !== -1 ? (row[colContact] || '').trim() : '';
+        const stationRaw = colStation !== -1 ? (row[colStation] || '').trim() : '';
+        const coveredAreas = colAreas !== -1 ? (row[colAreas] || '').trim() : '';
+
+        // Determine recipient display name
+        const middlePart = mi ? `${mi}. ` : '';
+        const fullName =
+          `${firstName} ${middlePart}${lastName}`.trim() ||
+          email.split('@')[0] ||
+          `Recipient ${recipients.length + i}`;
+
+        // Map station code & station name
+        let stationCode = 'PCP';
+        let stationName = 'Palayan Seismic Station';
+        const stLower = stationRaw.toLowerCase();
+        if (stLower.includes('cgp') || stLower.includes('cagayan')) {
+          stationCode = 'CGP';
+          stationName = 'Cagayan de Oro Seismic Station';
+        } else if (stLower.includes('bip') || stLower.includes('bislig')) {
+          stationCode = 'BIP';
+          stationName = 'Bislig Seismic Station';
+        } else if (stLower.includes('tgy') || stLower.includes('tagaytay')) {
+          stationCode = 'TGY';
+          stationName = 'Tagaytay Seismic Station';
+        } else if (stLower.includes('dav') || stLower.includes('davao')) {
+          stationCode = 'DAV';
+          stationName = 'Davao Seismic Station';
+        } else if (stLower.includes('qvp') || stLower.includes('main') || stLower.includes('central')) {
+          stationCode = 'QVP';
+          stationName = 'Main Office (Global)';
+        } else if (stationRaw) {
+          stationName = stationRaw;
+          stationCode = stationRaw.slice(0, 3).toUpperCase();
+        }
+
+        const isEmailProvided = email.length > 0 && email.includes('@');
+        const newRecord: RecipientRecord = {
+          id: `REC-IMP-${Date.now().toString().slice(-4)}-${i}`,
+          stationCode,
+          stationName,
+          recipientName: fullName,
+          role: 'Station Personnel',
+          emailAddress: email,
+          contactNumber: contact || '—',
+          verificationStatus: isEmailProvided ? 'Verified' : 'Missing Email',
+          alertScope: 'Station AOR Alerts',
+          accountStatus: isEmailProvided ? 'Active' : 'Pending Setup',
+          lastVerified: isEmailProvided ? 'Verified via CSV import' : '—',
+          lastAlertSent: '—',
+          firstName,
+          lastName,
+          middleInitial: mi,
+          coveredAreas,
+        };
+
+        parsed.push(newRecord);
+      }
+
+      if (parsed.length === 0) {
+        setCsvError('No valid recipient rows found in the CSV file.');
+      } else {
+        setParsedCsvRecords(parsed);
+        setCsvFileName(filename);
+      }
+    } catch (err: any) {
+      setCsvError(`Error reading CSV file: ${err?.message || 'Invalid CSV structure'}`);
+    } finally {
+      setIsParsingCsv(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        parseCsvText(text, file.name);
+        setIsImportModalOpen(true);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmImport = () => {
+    if (parsedCsvRecords.length === 0) return;
+    setRecipients((prev) => [...parsedCsvRecords, ...prev]);
+    setSelectedId(parsedCsvRecords[0].id);
+    parsedCsvRecords.forEach((r) => _onAddRecipient?.(r));
+    setIsImportModalOpen(false);
+    showNotification(`Successfully imported ${parsedCsvRecords.length} recipients from ${csvFileName}.`);
+    setParsedCsvRecords([]);
+    setCsvFileName('');
+  };
 
   // Metrics
   const metrics = useMemo(() => {
@@ -583,12 +872,13 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
             </select>
           </div>
 
-          {/* Filter & Clear Action Buttons */}
+          {/* Filter, Clear & Import Action Buttons */}
           <div className="lg:col-span-1 flex items-center gap-1.5 justify-end">
             <button
               type="button"
               onClick={() => showNotification('Filters updated.')}
-              className="h-8 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
+              className="h-8 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
+              title="Apply filters"
             >
               <Filter className="w-3.5 h-3.5" />
               <span>Filter</span>
@@ -596,11 +886,20 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
             <button
               type="button"
               onClick={handleClearFilters}
-              className="h-8 px-2.5 bg-white hover:bg-blue-50 border border-blue-500 text-blue-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+              className="h-8 px-2 bg-white hover:bg-blue-50 border border-blue-500 text-blue-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
               title="Reset all filters"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Clear</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="h-8 px-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-500 text-emerald-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+              title="Import recipients from CSV file"
+            >
+              <Upload className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Import</span>
             </button>
           </div>
         </div>
@@ -718,17 +1017,30 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
 
                     {/* Action */}
                     <td className="py-2.5 px-3 whitespace-nowrap text-center">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId(item.id);
-                        }}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId(item.id);
+                          }}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteModal(item);
+                          }}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors"
+                          title={`Delete ${item.recipientName}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -743,10 +1055,34 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
         {/* Left Panel: Recipient Details (~5 cols) */}
         <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between">
           <div>
-            {/* Header with blue vertical bar */}
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-              <span className="w-1.5 h-5 bg-blue-600 rounded-full inline-block" />
-              <h2 className="text-base font-bold text-slate-900">Recipient Details</h2>
+            {/* Header with blue vertical bar and actions */}
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-blue-600 rounded-full inline-block" />
+                <h2 className="text-base font-bold text-slate-900">Recipient Details</h2>
+              </div>
+              {selectedRecipient && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={openEditModal}
+                    className="px-2.5 py-1 rounded-md border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1 transition-colors"
+                    title="Edit recipient"
+                  >
+                    <Edit2 className="w-3 h-3 text-blue-600" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDeleteModal(selectedRecipient)}
+                    className="px-2.5 py-1 rounded-md border border-rose-200 bg-rose-50/50 hover:bg-rose-100/70 text-rose-600 text-xs font-medium flex items-center gap-1 transition-colors"
+                    title={`Delete ${selectedRecipient.recipientName}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Recipient Field List */}
@@ -787,6 +1123,13 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
                 <span className="col-span-5 font-semibold text-slate-700">Alert Scope</span>
                 <span className="col-span-7 text-blue-700 font-semibold">{selectedRecipient.alertScope}</span>
               </div>
+
+              {selectedRecipient.coveredAreas && (
+                <div className="grid grid-cols-12 py-1 border-b border-slate-100/70">
+                  <span className="col-span-5 font-semibold text-slate-700">Covered Areas</span>
+                  <span className="col-span-7 text-slate-800 font-medium">{selectedRecipient.coveredAreas}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-12 py-1 border-b border-slate-100/70">
                 <span className="col-span-5 font-semibold text-slate-700">Verification Status</span>
@@ -926,11 +1269,24 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
           {/* Edit Recipient */}
           <button
             type="button"
+            disabled={!selectedRecipient}
             onClick={openEditModal}
-            className="px-3.5 py-1.5 rounded-lg border border-blue-500 text-blue-600 hover:bg-blue-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-1.5 rounded-lg border border-blue-500 text-blue-600 hover:bg-blue-50 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
           >
             <Edit2 className="w-3.5 h-3.5" />
             <span>Edit Recipient</span>
+          </button>
+
+          {/* Delete Recipient */}
+          <button
+            type="button"
+            disabled={!selectedRecipient}
+            onClick={() => selectedRecipient && openDeleteModal(selectedRecipient)}
+            className="px-3.5 py-1.5 rounded-lg border border-rose-500 text-rose-600 hover:bg-rose-50 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+            title={selectedRecipient ? `Delete ${selectedRecipient.recipientName}` : 'Select a recipient to delete'}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Recipient</span>
           </button>
 
           {/* Verify Email */}
@@ -974,12 +1330,29 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
           </button>
         </div>
 
-        {/* Right Side Button */}
-        <div>
+        {/* Right Side Buttons: Import & Export */}
+        <div className="flex items-center gap-2">
+          {/* Hidden File Input for CSV */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".csv"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg border border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+            title="Import recipients from CSV file"
+          >
+            <Upload className="w-3.5 h-3.5 text-blue-600" />
+            <span>Import Recipients</span>
+          </button>
           <button
             type="button"
             onClick={handleExportRecipients}
-            className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-blue-600" />
             <span>Export Recipients</span>
@@ -1262,6 +1635,336 @@ export const RecipientsView: React.FC<RecipientsViewProps> = ({ onAddRecipient: 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Recipient Confirmation Modal */}
+      {isDeleteModalOpen && recipientToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-rose-50/70 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Delete Recipient</h3>
+                  <p className="text-[11px] text-slate-500">Remove recipient from alert notification registry</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setRecipientToDelete(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-slate-900 font-semibold">{recipientToDelete.recipientName}</strong>?
+                This will remove their contact information and stop all automated earthquake alerts to this address.
+              </p>
+
+              {/* Recipient Details Summary */}
+              <div className="bg-slate-50 rounded-xl border border-slate-200/80 p-3.5 space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Recipient Summary
+                  </span>
+                  <span className="font-mono text-[10px] font-bold text-slate-500">
+                    {recipientToDelete.id}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Station</span>
+                    <span className="font-semibold text-slate-800">
+                      {recipientToDelete.stationCode} - {recipientToDelete.stationName}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Role</span>
+                    <span className="font-semibold text-slate-800">
+                      {recipientToDelete.role}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[10px]">Email Address</span>
+                    <span className="font-mono text-slate-800 font-medium">
+                      {recipientToDelete.emailAddress || '— (No email)'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Alert Scope</span>
+                    <span className="text-slate-700">
+                      {recipientToDelete.alertScope}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Verification Status</span>
+                    <span className="text-slate-700 font-medium">
+                      {recipientToDelete.verificationStatus}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning Notice */}
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 flex items-start gap-2.5 text-[11px] text-amber-800 leading-relaxed">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  This action cannot be undone. To temporarily halt alerts without deletion, you can disable the recipient instead.
+                </span>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setRecipientToDelete(null);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-xs font-semibold text-white shadow-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Recipient</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Recipients CSV Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                  <Upload className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Import Recipients from CSV</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Upload a CSV file containing station personnel and disaster response contacts
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setParsedCsvRecords([]);
+                  setCsvFileName('');
+                  setCsvError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              {/* Header Specification Callout */}
+              <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 text-blue-900 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold flex items-center gap-1.5 text-xs text-blue-950">
+                    <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                    Required CSV Column Headers:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="px-2.5 py-1 bg-white hover:bg-blue-100/60 border border-blue-300 text-blue-700 font-semibold rounded-lg text-[11px] flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                    title="Download template CSV with sample rows"
+                  >
+                    <Download className="w-3 h-3 text-blue-600" />
+                    <span>Download Template</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    'First Name',
+                    'Last Name',
+                    'Middle Initial',
+                    'Email Address',
+                    'Contact Number',
+                    'Station Name',
+                    'AOR Provinces / Covered Areas',
+                  ].map((header) => (
+                    <span
+                      key={header}
+                      className="px-2 py-0.5 rounded-md bg-white border border-blue-200 text-blue-800 text-[10px] font-mono font-semibold"
+                    >
+                      {header}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upload Dropzone */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1.5">
+                  Select CSV File
+                </label>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const text = event.target?.result as string;
+                        if (text) {
+                          parseCsvText(text, file.name);
+                        }
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                  className="border-2 border-dashed border-blue-300 hover:border-blue-500 rounded-xl p-6 bg-slate-50/60 hover:bg-blue-50/40 text-center transition-all cursor-pointer group"
+                >
+                  <Upload className="w-8 h-8 text-blue-500 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <p className="text-xs font-semibold text-slate-800">
+                    {csvFileName ? (
+                      <span className="text-blue-700 font-bold">{csvFileName}</span>
+                    ) : (
+                      'Click to browse or drag and drop CSV file here'
+                    )}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Accepts comma-separated (.csv) files up to 5MB
+                  </p>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {csvError && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-rose-700 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">CSV Parsing Error</span>
+                    <span>{csvError}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Parsed Preview Table */}
+              {parsedCsvRecords.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      Preview ({parsedCsvRecords.length} recipients ready to import)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                    >
+                      Choose Different File
+                    </button>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold sticky top-0">
+                        <tr>
+                          <th className="py-2 px-3">Name</th>
+                          <th className="py-2 px-3">Email Address</th>
+                          <th className="py-2 px-3">Contact</th>
+                          <th className="py-2 px-3">Station</th>
+                          <th className="py-2 px-3">AOR Covered Areas</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {parsedCsvRecords.map((r, idx) => (
+                          <tr key={r.id || idx} className="hover:bg-slate-50/70">
+                            <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                              {r.recipientName}
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              {r.emailAddress ? (
+                                <span className="text-blue-600 font-medium">{r.emailAddress}</span>
+                              ) : (
+                                <span className="text-rose-500 font-semibold text-[11px]">(Missing Email)</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 whitespace-nowrap font-mono text-[11px]">
+                              {r.contactNumber}
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className="font-bold text-blue-600 mr-1">{r.stationCode}</span>
+                              <span className="text-slate-600 text-[11px]">{r.stationName}</span>
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 text-[11px] max-w-xs truncate">
+                              {r.coveredAreas || '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="text-xs text-slate-600 hover:text-blue-600 font-medium flex items-center gap-1 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Download Sample Template</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsImportModalOpen(false);
+                    setParsedCsvRecords([]);
+                    setCsvFileName('');
+                    setCsvError(null);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={parsedCsvRecords.length === 0 || isParsingCsv}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none text-xs font-semibold text-white shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>
+                    Import {parsedCsvRecords.length > 0 ? `${parsedCsvRecords.length} ` : ''}Recipients
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

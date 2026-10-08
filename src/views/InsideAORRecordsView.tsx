@@ -56,7 +56,7 @@ export const InsideAORRecordsView: React.FC<InsideAORRecordsViewProps> = ({
 }) => {
   const isCgpScoped = currentUser?.assignedAor === 'CGP';
   const isPcpScoped = currentUser?.assignedAor === 'PCP';
-  const isStationScoped = Boolean(currentUser?.assignedAor && currentUser.assignedAor !== 'ALL');
+  const isStationScoped = currentUser?.assignedAor && currentUser.assignedAor !== 'ALL';
 
   // Only inside AOR records with enriched location & date
   const insideRecords = useMemo(() => {

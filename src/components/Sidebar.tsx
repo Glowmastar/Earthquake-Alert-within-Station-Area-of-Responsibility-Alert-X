@@ -49,12 +49,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleHide,
   onLogout,
 }) => {
-  const [recordsExpanded, setRecordsExpanded] = useState(true);
-  const [mapExpanded, setMapExpanded] = useState(true);
-  const [exceptionExpanded, setExceptionExpanded] = useState(true);
-  const [emailExpanded, setEmailExpanded] = useState(true);
-  const [intensityExpanded, setIntensityExpanded] = useState(true);
-  const [adminExpanded, setAdminExpanded] = useState(true);
+  const [recordsExpanded, setRecordsExpanded] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [exceptionExpanded, setExceptionExpanded] = useState(false);
+  const [emailExpanded, setEmailExpanded] = useState(false);
+  const [intensityExpanded, setIntensityExpanded] = useState(false);
+  const [adminExpanded, setAdminExpanded] = useState(false);
 
   const handleNavigate = (view: string, filter?: string) => {
     onNavigate(view, filter);
@@ -64,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isRecordsView = currentView === 'records';
   const isAllRecordsActive = isRecordsView && (currentFilter === 'ALL' || !currentFilter);
   const isInsideAorActive = isRecordsView && currentFilter === 'INSIDE_AOR';
+  const isAdmin = currentUser?.role === 'Administrator';
 
   return (
     <>
@@ -109,10 +110,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <h1 className="text-xl font-black text-white tracking-wider flex items-center gap-1 leading-none">
                   ALERT <span className="text-cyan-400">X</span>
                 </h1>
-                <p className="text-[9px] font-bold tracking-widest text-cyan-400/90 uppercase mt-1 leading-tight">
-                  PEOPLE SAFER
+                <p className="text-[8.5px] font-bold tracking-wider text-cyan-400/90 uppercase mt-1 leading-tight">
+                  Earthquake Alert
                   <br />
-                  <span className="text-cyan-300">COMMUNITIES STRONGER</span>
+                  <span className="text-cyan-300">Within Station AOR</span>
                 </p>
               </div>
             </div>
@@ -209,16 +210,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={recordsExpanded ? "Collapse section" : "Expand section"}
                 aria-label={recordsExpanded ? "Collapse section" : "Expand section"}
               >
-                {recordsExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                    recordsExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
+                  }`}
+                />
               </button>
             </div>
 
-            {recordsExpanded && (
-              <div className="mt-1 ml-2 pl-2 space-y-1">
+            <div
+              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                recordsExpanded
+                  ? 'grid-rows-[1fr] opacity-100 mt-1'
+                  : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden ml-2 pl-2 space-y-1">
                 <button
                   type="button"
                   onClick={() => handleNavigate('records', 'ALL')}
@@ -268,7 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Outside AOR</span>
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* AOR Map Dropdown */}
@@ -302,16 +309,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={mapExpanded ? "Collapse section" : "Expand section"}
                 aria-label={mapExpanded ? "Collapse section" : "Expand section"}
               >
-                {mapExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                    mapExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
+                  }`}
+                />
               </button>
             </div>
 
-            {mapExpanded && (
-              <div className="mt-1 ml-2 pl-2 space-y-1">
+            <div
+              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                mapExpanded
+                  ? 'grid-rows-[1fr] opacity-100 mt-1'
+                  : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden ml-2 pl-2 space-y-1">
                 <button
                   type="button"
                   onClick={() => handleNavigate('map', 'STATION_BOUNDARIES')}
@@ -349,7 +362,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Boundary Review</span>
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Exception Review Dropdown */}
@@ -393,17 +406,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   title={exceptionExpanded ? "Collapse section" : "Expand section"}
                   aria-label={exceptionExpanded ? "Collapse section" : "Expand section"}
                 >
-                  {exceptionExpanded ? (
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                      exceptionExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
+                    }`}
+                  />
                 </button>
               </div>
             </div>
 
-            {exceptionExpanded && (
-              <div className="mt-1 ml-2 pl-2 space-y-1">
+            <div
+              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                exceptionExpanded
+                  ? 'grid-rows-[1fr] opacity-100 mt-1'
+                  : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden ml-2 pl-2 space-y-1">
                 <button
                   type="button"
                   onClick={() => handleNavigate('exceptions', 'Offshore Event')}
@@ -441,7 +460,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Boundary Events</span>
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Email Dropdown (Matching Screenshot) */}
@@ -475,34 +494,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={emailExpanded ? "Collapse section" : "Expand section"}
                 aria-label={emailExpanded ? "Collapse section" : "Expand section"}
               >
-                {emailExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                    emailExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
+                  }`}
+                />
               </button>
             </div>
 
-            {emailExpanded && (
-              <div className="mt-1 ml-2 pl-2 space-y-1">
+            <div
+              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                emailExpanded
+                  ? 'grid-rows-[1fr] opacity-100 mt-1'
+                  : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden ml-2 pl-2 space-y-1">
                 <button
                   type="button"
                   onClick={() => handleNavigate('email', 'DESIGN_TEMPLATE')}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'email'
+                    currentView === 'email' && currentFilter !== 'TEST_EMAIL'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'email' ? 'bg-white' : 'bg-slate-400'
+                      currentView === 'email' && currentFilter !== 'TEST_EMAIL' ? 'bg-white' : 'bg-slate-400'
                     }`}
                   />
                   <span>Design Template</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('email', 'TEST_EMAIL')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    currentView === 'email' && currentFilter === 'TEST_EMAIL'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                      currentView === 'email' && currentFilter === 'TEST_EMAIL' ? 'bg-white' : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>Test Email</span>
+                </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Recipients */}
@@ -564,16 +605,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={intensityExpanded ? "Collapse section" : "Expand section"}
                 aria-label={intensityExpanded ? "Collapse section" : "Expand section"}
               >
-                {intensityExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                    intensityExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
+                  }`}
+                />
               </button>
             </div>
 
-            {intensityExpanded && (
-              <div className="mt-1 ml-2 pl-2 space-y-1">
+            <div
+              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                intensityExpanded
+                  ? 'grid-rows-[1fr] opacity-100 mt-1'
+                  : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden ml-2 pl-2 space-y-1">
                 {/* Previous Tab: Field Intensity Reports */}
                 <button
                   type="button"
@@ -626,7 +673,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Social Media</span>
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Audit Log */}
@@ -643,122 +690,148 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Audit Log</span>
           </button>
 
-          {/* Administration Dropdown */}
-          <div>
-            <div
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
-                currentView === 'settings' || currentView === 'roles'
-                  ? 'text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  handleNavigate('settings', 'GENERAL');
-                  setAdminExpanded(true);
-                }}
-                className="flex items-center gap-3 flex-1 text-left focus:outline-none cursor-pointer"
-                title="Go to Administration Settings"
+          {/* Administration Dropdown (Admin Only) */}
+          {isAdmin && (
+            <div>
+              <div
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
+                  currentView === 'settings' || currentView === 'roles'
+                    ? 'text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                }`}
               >
-                <SettingsIcon className="w-4 h-4 shrink-0" />
-                <span>Administration</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setAdminExpanded(!adminExpanded);
-                }}
-                className="p-1 hover:bg-white/10 rounded transition-colors"
-                title={adminExpanded ? "Collapse section" : "Expand section"}
-                aria-label={adminExpanded ? "Collapse section" : "Expand section"}
-              >
-                {adminExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </div>
-
-            {adminExpanded && (
-              <div className="mt-1 ml-2 pl-2 space-y-1">
                 <button
                   type="button"
-                  onClick={() => handleNavigate('settings', 'EQINFO_SOURCE')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'settings' && currentFilter === 'EQINFO_SOURCE'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
+                  onClick={() => {
+                    handleNavigate('settings', 'GENERAL');
+                    setAdminExpanded(true);
+                  }}
+                  className="flex items-center gap-3 flex-1 text-left focus:outline-none cursor-pointer"
+                  title="Go to Administration Settings"
                 >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'settings' && currentFilter === 'EQINFO_SOURCE'
-                        ? 'bg-white'
-                        : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>EQInfo Source</span>
+                  <SettingsIcon className="w-4 h-4 shrink-0" />
+                  <span>Administration</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleNavigate('settings', 'AOR_RULES')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'settings' && currentFilter === 'AOR_RULES'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAdminExpanded(!adminExpanded);
+                  }}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  title={adminExpanded ? "Collapse section" : "Expand section"}
+                  aria-label={adminExpanded ? "Collapse section" : "Expand section"}
                 >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'settings' && currentFilter === 'AOR_RULES'
-                        ? 'bg-white'
-                        : 'bg-slate-400'
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                      adminExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
                     }`}
                   />
-                  <span>AOR Rules</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('settings', 'ROLES')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'roles' || (currentView === 'settings' && currentFilter === 'ROLES')
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'roles' || (currentView === 'settings' && currentFilter === 'ROLES')
-                        ? 'bg-white'
-                        : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>Roles</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('settings', 'GENERAL')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
-                        ? 'bg-white'
-                        : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>Settings</span>
                 </button>
               </div>
-            )}
-          </div>
+
+              <div
+                className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                  adminExpanded
+                    ? 'grid-rows-[1fr] opacity-100 mt-1'
+                    : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                }`}
+              >
+                <div className="overflow-hidden ml-2 pl-2 space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('settings', 'EQINFO_SOURCE')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      currentView === 'settings' && currentFilter === 'EQINFO_SOURCE'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'settings' && currentFilter === 'EQINFO_SOURCE'
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>EQInfo Source</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('settings', 'AOR_RULES')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      currentView === 'settings' && currentFilter === 'AOR_RULES'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'settings' && currentFilter === 'AOR_RULES'
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>AOR Rules</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('settings', 'ROLES')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      currentView === 'roles' || (currentView === 'settings' && currentFilter === 'ROLES')
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'roles' || (currentView === 'settings' && currentFilter === 'ROLES')
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>Roles</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('settings', 'GENERAL')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('settings', 'VERSION_HISTORY')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      currentView === 'settings' && currentFilter === 'VERSION_HISTORY'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'settings' && currentFilter === 'VERSION_HISTORY'
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>Version History</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </nav>
       </div>
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, LogIn, Landmark, CheckCircle2, Shield, Radio } from 'lucide-react';
 import { UserProfile, PRECONFIGURED_USERS } from '../types';
+import { LoginPhilippineMap } from '../components/LoginPhilippineMap';
 
 interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
@@ -133,6 +134,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         </div>
       )}
 
+      {/* Coastal Sunset Seascape Photo Background on Left (Matching Target GUI Screenshot) */}
+      <div
+        className="absolute inset-y-0 left-0 w-full lg:w-3/5 pointer-events-none opacity-55 mix-blend-screen bg-cover bg-left-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/assets/philippine-sunset.jpg)',
+          maskImage:
+            'linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0) 85%)',
+          WebkitMaskImage:
+            'linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0) 85%)',
+        }}
+      />
+
       {/* Layered Glowing Blue Organic Seismic Waves Background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Radial ambient glows */}
@@ -214,40 +227,68 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         </svg>
       </div>
 
-      {/* Main Content Container */}
-      <div className="relative z-10 w-full max-w-md flex flex-col items-center">
-        {/* Top Logo & Slogan Header (matching screenshot) */}
-        <div className="flex flex-col items-center mb-7 text-center">
-          {/* Waveform Pulse Icon and ALERT X text in one line */}
-          <div className="flex items-center gap-2.5">
-            {/* Cyan Seismic Waveform Icon */}
-            <svg
-              className="w-12 h-12 text-cyan-400 shrink-0 drop-shadow-[0_0_12px_rgba(6,182,212,0.8)]"
-              viewBox="0 0 48 36"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M2 18H10L14 7L20 31L26 3L32 25L36 18H46"
-                stroke="currentColor"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-
-            {/* ALERT X Title */}
-            <div className="flex items-center tracking-tight font-black text-3xl sm:text-4xl">
-              <span className="text-white">ALERT</span>
-              <span className="text-blue-500 ml-1.5">X</span>
-            </div>
+      {/* DOST-PHIVOLCS Official Agency Logo on Upper Left Side */}
+      <div className="absolute top-5 left-5 sm:top-6 sm:left-8 lg:top-8 lg:left-10 z-30 flex items-center gap-3 bg-[#02091c]/85 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-slate-700/80 shadow-2xl transition-all duration-300 pointer-events-auto hover:border-cyan-500/60 group">
+        <img
+          src="/assets/phivolcs-logo.svg"
+          alt="DOST-PHIVOLCS Official Seal"
+          className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 drop-shadow-[0_0_12px_rgba(0,174,239,0.5)] transition-transform duration-300 group-hover:scale-105"
+        />
+        <div className="flex flex-col text-left">
+          <div className="text-sm sm:text-base font-black tracking-wider text-white leading-tight">
+            DOST-PHIVOLCS
           </div>
-
-          {/* Slogan */}
-          <div className="text-[11px] font-bold tracking-[0.2em] text-cyan-400 mt-2 uppercase">
-            PEOPLE SAFER • COMMUNITIES STRONGER
+          <div className="text-[8px] sm:text-[9px] font-bold uppercase tracking-wider text-slate-200 leading-tight mt-0.5">
+            Philippine Institute of
+            <br />
+            Volcanology and Seismology
+          </div>
+          <div className="text-[7.5px] sm:text-[8px] font-medium text-cyan-300/90 leading-tight mt-1">
+            OneDOST4U: Solutions and Opportunities for All
           </div>
         </div>
+      </div>
+
+      {/* Dark Blue Philippine Map on Right Side with Looping Random AOR Highlight */}
+      <div className="absolute right-0 top-0 bottom-0 w-full lg:w-[56%] xl:w-[60%] flex items-center justify-center pointer-events-none lg:pointer-events-auto opacity-30 lg:opacity-100 z-10 transition-opacity duration-500 overflow-hidden">
+        <LoginPhilippineMap />
+      </div>
+
+      {/* Main Content Container */}
+      <div className="relative z-20 w-full max-w-7xl mx-auto flex items-center justify-between min-h-[90vh] px-4 sm:px-6 lg:px-12 py-6">
+        <div className="w-full max-w-md flex flex-col items-center mx-auto lg:mx-0 lg:ml-6 xl:ml-16 shrink-0">
+          {/* Top Logo & Slogan Header (matching screenshot) */}
+          <div className="flex flex-col items-center mb-7 text-center">
+            {/* Waveform Pulse Icon and ALERT X text in one line */}
+            <div className="flex items-center gap-2.5">
+              {/* Cyan Seismic Waveform Icon */}
+              <svg
+                className="w-12 h-12 text-cyan-400 shrink-0 drop-shadow-[0_0_12px_rgba(6,182,212,0.8)]"
+                viewBox="0 0 48 36"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M2 18H10L14 7L20 31L26 3L32 25L36 18H46"
+                  stroke="currentColor"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+
+              {/* ALERT X Title */}
+              <div className="flex items-center tracking-tight font-black text-3xl sm:text-4xl">
+                <span className="text-white">ALERT</span>
+                <span className="text-blue-500 ml-1.5">X</span>
+              </div>
+            </div>
+
+            {/* Slogan */}
+            <div className="text-[10px] sm:text-[11px] font-bold tracking-[0.14em] text-cyan-400 mt-2 uppercase text-center max-w-xs sm:max-w-sm">
+              Earthquake Alert within Station Area of Responsibility
+            </div>
+          </div>
 
         {/* White Card Container (matching screenshot) */}
         <div className="bg-white rounded-3xl p-7 sm:p-9 shadow-2xl w-full border border-white/60">
@@ -424,6 +465,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         <p className="text-center text-xs text-slate-400 font-medium mt-6 tracking-wide">
           Alert X Earthquake Monitoring and Email Alert System
         </p>
+        </div>
       </div>
     </div>
   );

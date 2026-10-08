@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Users,
   FileText,
@@ -15,6 +17,7 @@ import {
   Download,
   X,
   Check,
+  CheckCircle2,
   Radio,
   MapPin,
   Building2,
@@ -24,18 +27,20 @@ import {
   ChevronRight,
   Activity,
   Info,
+  Compass,
+  Sun,
+  Moon,
 } from 'lucide-react';
-import { EarthquakeRecord } from '../types';
+import { EarthquakeRecord, UserProfile } from '../types';
 import {
   PHIVOLCS_SCSS_NETWORK,
   ALL_SCSS_STATIONS,
   ALL_STSS_SUBSTATIONS,
   SCSSStationAOR,
   STSSSubStation,
-  DemographicData,
-  MIMAROPA_DEMOGRAPHICS,
 } from '../data/philippinesGeoData';
-import { UserProfile } from '../types';
+import { ALL_SNAPPED_STATION_AORS } from '../data/allSnappedAorData';
+import { CGP_SNAPPED_AOR_COORDINATES, CGP_AOR_PROVINCES } from '../data/cgpSnappedAorData';
 
 interface AORMapViewProps {
   earthquakes: EarthquakeRecord[];
@@ -50,15 +55,35 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
   onNavigateToRecords,
   currentUser,
 }) => {
-  const isPcpRestricted = currentUser?.assignedAor === 'PCP';
-  const [selectedStationCode, setSelectedStationCode] = useState<string>('PCP');
+  // Scoping & Permissions check
+  const isAdmin =
+    currentUser?.role === 'Administrator' ||
+    currentUser?.assignedAor === 'ALL' ||
+    !currentUser?.assignedAor ||
+    currentUser?.name === 'Juan Dela Cruz';
+
+  const userStationAor = currentUser?.assignedAor;
+  const isCgpScoped = !isAdmin && userStationAor === 'CGP';
+  const isPcpScoped = !isAdmin && userStationAor === 'PCP';
+  const isBipScoped = !isAdmin && userStationAor === 'BIP';
+  const isStationScoped = !isAdmin && !!userStationAor && userStationAor !== 'ALL';
+
+  // Determine active default station
+  const defaultStationCode = isCgpScoped
+    ? 'CGP'
+    : isPcpScoped
+    ? 'PCP'
+    : isBipScoped
+    ? 'BIP'
+    : userStationAor && userStationAor !== 'ALL'
+    ? userStationAor
+    : 'CGP';
+
+  const [selectedStationCode, setSelectedStationCode] = useState<string>(defaultStationCode);
+  const [showAllStationsAdmin, setShowAllStationsAdmin] = useState<boolean>(isAdmin);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [stationSearch, setStationSearch] = useState('');
   const [islandFilter, setIslandFilter] = useState<'All' | 'Luzon' | 'Visayas' | 'Mindanao'>('All');
-  const [zoomLevel, setZoomLevel] = useState<number>(isPcpRestricted ? 1.2 : 1);
-  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>(
-    isPcpRestricted ? { x: 30, y: 70 } : { x: 0, y: 0 }
-  );
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [selectedSubStation, setSelectedSubStation] = useState<STSSSubStation | null>(null);
@@ -66,19 +91,42 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
   // Layer visibility toggles
   const [showEpicenters, setShowEpicenters] = useState(true);
   const [showProvinces, setShowProvinces] = useState(true);
-  const [showBoundaryReview, setShowBoundaryReview] = useState(true);
+  const [showStationBoundary, setShowStationBoundary] = useState(true);
   const [showSubStations, setShowSubStations] = useState(true);
   const [showLayersMenu, setShowLayersMenu] = useState(false);
+  const [basemapType, setBasemapType] = useState<'light' | 'dark' | 'topo' | 'satellite'>('light');
 
-  // When scoped to PCP, enforce PCP selection
-  const activeStationCode = isPcpRestricted ? 'PCP' : selectedStationCode;
+  // GeoJSON state
+  const [provincesGeoJson, setProvincesGeoJson] = useState<any | null>(null);
+  const [hoveredProvince, setHoveredProvince] = useState<string | null>(null);
+
+  // Map API Key & Provider Configuration
+  const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
+  const [customApiKey, setCustomApiKey] = useState<string>(() => {
+    return localStorage.getItem('alertx_map_api_key') || '';
+  });
+  const [apiKeyNotice, setApiKeyNotice] = useState<string | null>(null);
+
+  // Leaflet refs
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const layersGroupRef = useRef<L.LayerGroup | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Enforce station selection if scoped to a station
+  const activeStationCode = isStationScoped ? defaultStationCode : selectedStationCode;
   const selectedStation: SCSSStationAOR =
-    PHIVOLCS_SCSS_NETWORK[activeStationCode] || PHIVOLCS_SCSS_NETWORK['PCP'];
+    PHIVOLCS_SCSS_NETWORK[activeStationCode] || PHIVOLCS_SCSS_NETWORK['CGP'];
 
-  // Filter stations for dropdown
+  // Snapped Station AOR data
+  const currentSnappedAor = useMemo(() => {
+    return ALL_SNAPPED_STATION_AORS.find((a) => a.code === activeStationCode);
+  }, [activeStationCode]);
+
+  // Prohibited / Allowed stations in dropdown
   const filteredDropdownStations = useMemo(() => {
-    if (isPcpRestricted) {
-      return [PHIVOLCS_SCSS_NETWORK['PCP']];
+    if (isStationScoped) {
+      return [PHIVOLCS_SCSS_NETWORK[defaultStationCode] || PHIVOLCS_SCSS_NETWORK['CGP']];
     }
     return ALL_SCSS_STATIONS.filter((st) => {
       const matchIsland = islandFilter === 'All' || st.islandGroup === islandFilter;
@@ -88,22 +136,426 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
         st.code.toLowerCase().includes(q) ||
         st.name.toLowerCase().includes(q) ||
         st.location.toLowerCase().includes(q) ||
-        st.provinces.some((p) => p.toLowerCase().includes(q)) ||
-        st.subStations.some(
-          (sub) =>
-            sub.code.toLowerCase().includes(q) ||
-            sub.name.toLowerCase().includes(q) ||
-            sub.location.toLowerCase().includes(q)
-        );
+        st.provinces.some((p) => p.toLowerCase().includes(q));
       return matchIsland && matchSearch;
     });
-  }, [islandFilter, stationSearch, isPcpRestricted]);
+  }, [islandFilter, stationSearch, isStationScoped, defaultStationCode]);
 
-  const handleZoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.2, 2.2));
-  const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.2, 0.8));
-  const handleReset = () => {
-    setZoomLevel(1);
-    setPanOffset({ x: 0, y: 0 });
+  // Load official PSGC province boundaries GeoJSON
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/data/philippines-provinces-psgc.geojson')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load provinces GeoJSON');
+        return res.json();
+      })
+      .then((data) => {
+        if (isMounted) {
+          setProvincesGeoJson(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load provinces GeoJSON:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    // Default center on Philippines archipelago
+    const initialCenter: [number, number] = isCgpScoped
+      ? [8.482, 124.647]
+      : isPcpScoped
+      ? [15.541, 121.084]
+      : [12.8797, 121.774];
+    const initialZoom = isStationScoped ? 8 : 6;
+
+    const map = L.map(mapContainerRef.current, {
+      center: initialCenter,
+      zoom: initialZoom,
+      minZoom: 5,
+      maxZoom: 14,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    mapInstanceRef.current = map;
+
+    // Tile Layer: Esri World Street (Default Light Mode - 100% Free & No Watermarks)
+    const tileLayer = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 18,
+        opacity: 0.95,
+      }
+    ).addTo(map);
+
+    tileLayerRef.current = tileLayer;
+
+    const layersGroup = L.layerGroup().addTo(map);
+    layersGroupRef.current = layersGroup;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, [isCgpScoped, isPcpScoped, isStationScoped]);
+
+  // Update Basemap when basemapType changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !tileLayerRef.current) return;
+
+    let url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+    let opacity = 0.95;
+
+    if (basemapType === 'dark') {
+      url = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+      opacity = 0.85;
+    } else if (basemapType === 'topo') {
+      url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
+      opacity = 0.85;
+    } else if (basemapType === 'satellite') {
+      url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      opacity = 0.9;
+    }
+
+    tileLayerRef.current.setUrl(url);
+    tileLayerRef.current.setOpacity(opacity);
+  }, [basemapType]);
+
+  // Render Leaflet Layers (AOR Boundaries, Province Boundaries, Stations, Earthquakes)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const group = layersGroupRef.current;
+    if (!map || !group) return;
+
+    group.clearLayers();
+
+    // Collect bounds to zoom/fit
+    const bounds = L.latLngBounds([]);
+
+    // 1. RENDER PROVINCES
+    if (showProvinces && provincesGeoJson) {
+      // Determine which provinces to include based on user scope and admin settings
+      let targetProvincesSet = new Set<string>();
+
+      if (isStationScoped) {
+        // ONLY show their own AOR provinces!
+        const stationProvs =
+          activeStationCode === 'CGP'
+            ? CGP_AOR_PROVINCES
+            : currentSnappedAor?.provincesIncluded || selectedStation.provinces;
+
+        stationProvs.forEach((p) => targetProvincesSet.add(p.toLowerCase()));
+      } else if (isAdmin && showAllStationsAdmin) {
+        // Admin: Show all AOR provinces
+        ALL_SNAPPED_STATION_AORS.forEach((st) => {
+          st.provincesIncluded?.forEach((p) => targetProvincesSet.add(p.toLowerCase()));
+        });
+      } else {
+        // Admin focused on single station
+        const stationProvs =
+          currentSnappedAor?.provincesIncluded || selectedStation.provinces;
+        stationProvs.forEach((p) => targetProvincesSet.add(p.toLowerCase()));
+      }
+
+      const geoJsonLayer = L.geoJSON(provincesGeoJson, {
+        filter: (feature: any) => {
+          const provName = (feature.properties?.adm2_en || feature.properties?.name || '').toLowerCase();
+          if (!provName) return false;
+
+          // If showing all provinces for admin
+          if (isAdmin && showAllStationsAdmin) {
+            return true;
+          }
+
+          // Otherwise check if province is part of target station AOR
+          return Array.from(targetProvincesSet).some((p) =>
+            provName.includes(p) || p.includes(provName)
+          );
+        },
+        style: (feature: any) => {
+          const provName = (feature?.properties?.adm2_en || '').toLowerCase();
+          const isSelectedStationProv =
+            activeStationCode === 'CGP'
+              ? CGP_AOR_PROVINCES.some((p) => p.toLowerCase() === provName || provName.includes(p.toLowerCase()))
+              : selectedStation.provinces.some((p) => p.toLowerCase() === provName || provName.includes(p.toLowerCase()));
+
+          const strokeColor = isSelectedStationProv
+            ? selectedStation.strokeColor || '#38bdf8'
+            : '#0284c7';
+          const fillColor = isSelectedStationProv
+            ? selectedStation.polygonColor || '#0ea5e9'
+            : '#0369a1';
+
+          return {
+            color: strokeColor,
+            weight: isSelectedStationProv ? 2.0 : 1.2,
+            opacity: 0.9,
+            fillColor: fillColor,
+            fillOpacity: isSelectedStationProv ? 0.28 : 0.15,
+            dashArray: isSelectedStationProv ? undefined : '3, 4',
+          };
+        },
+        onEachFeature: (feature: any, layer: L.Layer) => {
+          const provName = feature.properties?.adm2_en || feature.properties?.name || 'Province';
+          layer.bindTooltip(
+            `<div class="px-2.5 py-1.5 bg-slate-950/95 text-white rounded-lg text-xs font-semibold border border-cyan-400 shadow-xl">
+              <span class="text-cyan-300 font-bold block">${provName}</span>
+              <span class="text-[10px] text-slate-300 font-normal">AOR: ${selectedStation.code} (${selectedStation.name})</span>
+            </div>`,
+            { sticky: true, opacity: 0.95 }
+          );
+
+          layer.on({
+            mouseover: (e) => {
+              const target = e.target;
+              target.setStyle({
+                weight: 3.5,
+                color: '#38bdf8',
+                fillColor: '#38bdf8',
+                fillOpacity: 0.55,
+                dashArray: '',
+              });
+              if (target.bringToFront) {
+                target.bringToFront();
+              }
+              setHoveredProvince(provName);
+            },
+            mouseout: (e) => {
+              geoJsonLayer.resetStyle(e.target);
+              setHoveredProvince(null);
+            },
+          });
+        },
+      });
+
+      group.addLayer(geoJsonLayer);
+    }
+
+    // 2. RENDER STATION AOR SNAPPED BOUNDARIES
+    if (showStationBoundary) {
+      if (isAdmin && showAllStationsAdmin) {
+        // Admin: render all 15 station boundaries
+        ALL_SNAPPED_STATION_AORS.forEach((aor) => {
+          const isFocused = aor.code === activeStationCode;
+          const poly = L.polygon(aor.coordinates as any, {
+            color: isFocused ? '#f59e0b' : aor.strokeColor || '#38bdf8',
+            weight: isFocused ? 3 : 1.8,
+            fillColor: isFocused ? '#fbbf24' : aor.fillColor || '#0284c7',
+            fillOpacity: isFocused ? 0.3 : 0.14,
+            dashArray: isFocused ? undefined : '4, 4',
+          });
+
+          poly.bindTooltip(
+            `<div class="px-2 py-1 bg-slate-900 text-white rounded text-xs font-bold border border-slate-700">
+              ${aor.code}: ${aor.name}
+            </div>`,
+            { sticky: true }
+          );
+
+          poly.on('click', () => {
+            setSelectedStationCode(aor.code);
+          });
+
+          group.addLayer(poly);
+
+          if (isFocused) {
+            bounds.extend(poly.getBounds());
+          }
+        });
+      } else {
+        // Single station boundary (e.g. CGP or selected station)
+        const coords =
+          activeStationCode === 'CGP'
+            ? (CGP_SNAPPED_AOR_COORDINATES as any)
+            : currentSnappedAor?.coordinates || [];
+
+        if (coords && coords.length > 0) {
+          const poly = L.polygon(coords, {
+            color: selectedStation.strokeColor || '#9333ea',
+            weight: 2.5,
+            fillColor: selectedStation.polygonColor || '#a855f7',
+            fillOpacity: 0.25,
+          });
+
+          poly.bindTooltip(
+            `<div class="px-2.5 py-1.5 bg-slate-950/95 text-white rounded-lg text-xs font-semibold border border-purple-500/40 shadow-xl">
+              <span class="text-amber-400 font-bold block">${selectedStation.code} AOR Snapped Boundary</span>
+              <span class="text-[10px] text-slate-300">${selectedStation.name}</span>
+            </div>`,
+            { sticky: true }
+          );
+
+          group.addLayer(poly);
+          bounds.extend(poly.getBounds());
+        }
+      }
+    }
+
+    // 3. RENDER STATION HQ BEACON (SCSS Hub)
+    const hqLat = selectedStation.centerCoordinates.lat;
+    const hqLng = selectedStation.centerCoordinates.lng;
+    bounds.extend([hqLat, hqLng]);
+
+    const hqIcon = L.divIcon({
+      className: 'custom-station-icon',
+      html: `
+        <div class="relative flex items-center justify-center">
+          <div class="absolute w-12 h-12 rounded-full animate-ping opacity-35" style="background-color: ${selectedStation.dotColor}"></div>
+          <div class="absolute w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-white text-[10px] font-black" style="background-color: ${selectedStation.dotColor}">
+            ${selectedStation.code}
+          </div>
+          <div class="absolute -bottom-5 whitespace-nowrap px-1.5 py-0.5 rounded bg-slate-900/90 text-white font-mono font-bold text-[9px] border border-slate-700 shadow-md">
+            ${selectedStation.name}
+          </div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    const hqMarker = L.marker([hqLat, hqLng], { icon: hqIcon });
+    hqMarker.bindPopup(
+      `<div class="p-2 text-xs space-y-1">
+        <div class="font-bold text-slate-900 text-sm">${selectedStation.fullName}</div>
+        <div class="text-slate-600">${selectedStation.location}</div>
+        <div class="font-mono text-[11px] text-blue-600 font-bold">${hqLat.toFixed(4)}°N, ${hqLng.toFixed(4)}°E</div>
+        <div class="pt-1 text-[11px] text-slate-500 border-t border-slate-200">
+          Controlling hub for ${selectedStation.subStations.length} subordinate satellite stations.
+        </div>
+      </div>`
+    );
+    group.addLayer(hqMarker);
+
+    // 4. RENDER SUBORDINATE SATELLITE STATIONS (STSS) & TELEMETRY BEAMS
+    if (showSubStations && selectedStation.subStations) {
+      selectedStation.subStations.forEach((stss) => {
+        const subLat = stss.coordinates[0];
+        const subLng = stss.coordinates[1];
+        bounds.extend([subLat, subLng]);
+
+        // Connecting telemetry line from HQ to substation
+        const telemetryLine = L.polyline(
+          [
+            [hqLat, hqLng],
+            [subLat, subLng],
+          ],
+          {
+            color: selectedStation.strokeColor || '#9333ea',
+            weight: 1.5,
+            dashArray: '4, 4',
+            opacity: 0.7,
+          }
+        );
+        group.addLayer(telemetryLine);
+
+        // Substation icon
+        const isSubSelected = selectedSubStation?.code === stss.code;
+        const subIcon = L.divIcon({
+          className: 'custom-substation-icon',
+          html: `
+            <div class="relative flex items-center justify-center cursor-pointer ${isSubSelected ? 'scale-125' : ''}">
+              <div class="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-md flex items-center justify-center"></div>
+              <div class="absolute -bottom-4 whitespace-nowrap px-1 py-0.2 rounded bg-slate-900/80 text-emerald-300 font-mono text-[8px]">
+                ${stss.code}
+              </div>
+            </div>
+          `,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+        });
+
+        const subMarker = L.marker([subLat, subLng], { icon: subIcon });
+        subMarker.bindTooltip(
+          `<div class="px-2 py-1 bg-slate-900 text-white rounded text-xs font-semibold">
+            STSS ${stss.code}: ${stss.name} (${stss.province})
+          </div>`,
+          { sticky: true }
+        );
+        subMarker.on('click', () => {
+          setSelectedSubStation(stss);
+        });
+        group.addLayer(subMarker);
+      });
+    }
+
+    // 5. RENDER EARTHQUAKES IN THIS AOR
+    if (showEpicenters) {
+      const stationEqs = earthquakes.filter(
+        (eq) => eq.aor === activeStationCode || (isAdmin && showAllStationsAdmin)
+      );
+
+      stationEqs.slice(0, 15).forEach((eq) => {
+        const mag = eq.magnitude || 3.0;
+        const size = Math.max(16, Math.min(30, Math.round(mag * 4.5)));
+        const color = mag >= 5.0 ? '#ef4444' : mag >= 4.0 ? '#f59e0b' : '#3b82f6';
+
+        const eqIcon = L.divIcon({
+          className: 'custom-eq-icon',
+          html: `
+            <div class="relative flex items-center justify-center cursor-pointer hover:scale-125 transition-transform">
+              <div class="w-${size} h-${size} rounded-full flex items-center justify-center shadow-lg border-2 border-white text-white font-bold text-[9px]" style="width: ${size}px; height: ${size}px; background-color: ${color}">
+                ${mag.toFixed(1)}
+              </div>
+            </div>
+          `,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+
+        const eqMarker = L.marker([eq.coordinates.lat, eq.coordinates.lng], { icon: eqIcon });
+        eqMarker.bindTooltip(
+          `<div class="px-2 py-1 bg-slate-900 text-white rounded text-xs">
+            <strong>${eq.location}</strong><br/>
+            Mag ${mag.toFixed(1)} • ${eq.timePHT}
+          </div>`,
+          { sticky: true }
+        );
+        eqMarker.on('click', () => {
+          onSelectEarthquake(eq);
+        });
+        group.addLayer(eqMarker);
+      });
+    }
+
+    // Fit map bounds smoothly
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: isStationScoped ? 9 : 8 });
+    }
+  }, [
+    activeStationCode,
+    selectedStation,
+    currentSnappedAor,
+    provincesGeoJson,
+    showProvinces,
+    showStationBoundary,
+    showSubStations,
+    showEpicenters,
+    showAllStationsAdmin,
+    isAdmin,
+    isStationScoped,
+    selectedSubStation,
+    earthquakes,
+    onSelectEarthquake,
+  ]);
+
+  // Recenter map action
+  const handleRecenter = () => {
+    if (!mapInstanceRef.current) return;
+    if (isStationScoped || !showAllStationsAdmin) {
+      mapInstanceRef.current.flyTo(
+        [selectedStation.centerCoordinates.lat, selectedStation.centerCoordinates.lng],
+        8.5,
+        { duration: 1 }
+      );
+    } else {
+      mapInstanceRef.current.flyTo([12.8797, 121.774], 6, { duration: 1 });
+    }
   };
 
   const handleValidateGIS = () => {
@@ -122,7 +574,6 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
             type: 'FeatureCollection',
             station: selectedStation,
             subStations: selectedStation.subStations,
-            demographics: selectedStation.demographics || null,
             exportedAt: new Date().toISOString(),
             datasetVersion: selectedStation.version,
             recordsCount: earthquakes.filter((e) => e.aor === selectedStation.code).length,
@@ -139,7 +590,7 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
     );
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
 
     setActionNotice(
       `Station boundary geo-dataset & STSS telemetry for ${selectedStation.name} exported successfully.`
@@ -147,35 +598,19 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
     setTimeout(() => setActionNotice(null), 3500);
   };
 
-  // Mathematical Mercator-like projection for Philippine archipelago onto SVG canvas (viewBox="0 0 740 760")
-  const projectCoords = (lat: number, lng: number) => {
-    const minLng = 117.0;
-    const maxLng = 127.2;
-    const minLat = 4.8;
-    const maxLat = 21.2;
-    const x = 140 + ((lng - minLng) / (maxLng - minLng)) * 430;
-    const y = 690 - ((lat - minLat) / (maxLat - minLat)) * 630;
-    return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
-  };
-
-  const scssPos = projectCoords(
-    selectedStation.centerCoordinates.lat,
-    selectedStation.centerCoordinates.lng
-  );
-
   return (
     <div className="space-y-4">
       {/* Station Account Restricted Notice Banner */}
-      {isPcpRestricted && (
+      {isStationScoped && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between text-xs text-blue-900 shadow-2xs">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
             <span>
-              <strong>Station View Active:</strong> You are logged in with the <strong>Palayan Seismic Station</strong> user account (<code>{currentUser?.email}</code>). Only the Area of Responsibility (AOR) and telemetry sensors within <strong>PCP</strong> are displayed.
+              <strong>Station View Active:</strong> You are logged in with the <strong>{selectedStation.name}</strong> user account (<code>{currentUser?.email}</code>). Only the Area of Responsibility (AOR) and provincial boundaries within <strong>{selectedStation.code}</strong> are displayed.
             </span>
           </div>
           <span className="text-[11px] font-mono font-bold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded border border-blue-300 shrink-0 ml-2">
-            PCP AOR Only
+            {selectedStation.code} AOR Only
           </span>
         </div>
       )}
@@ -194,8 +629,8 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
         </div>
       )}
 
-      {/* 1. Top 4 Summary Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 1. Header Metrics Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Card 1: Controlling Stations (SCSS) */}
         <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
@@ -203,14 +638,14 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-700 block">
-              Controlling Stations (SCSS)
+              Controlling Station (SCSS)
             </span>
-            <div className="text-2xl font-bold text-blue-600 tracking-tight mt-0.5">
-              {isPcpRestricted ? 'PCP (Palayan)' : ALL_SCSS_STATIONS.length}
+            <div className="text-xl font-bold text-blue-600 tracking-tight mt-0.5">
+              {isStationScoped ? `${selectedStation.code} (${selectedStation.name})` : `${ALL_SCSS_STATIONS.length} Stations`}
             </div>
-            <span className="text-[11px] text-slate-500 block">
-              {isPcpRestricted
-                ? 'Central Luzon Hub • User Role Assigned'
+            <span className="text-[11px] text-slate-500 block truncate">
+              {isStationScoped
+                ? `${selectedStation.islandGroup} Hub • User Station Locked`
                 : '11 Luzon • 9 Visayas • 9 Mindanao'}
             </span>
           </div>
@@ -223,13 +658,17 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-700 block">
-              Satellite Stations (STSS)
+              Satellite Sensors (STSS)
             </span>
-            <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-0.5">
-              {isPcpRestricted ? `${selectedStation.subStations.length} (SLLP)` : ALL_STSS_SUBSTATIONS.length}
+            <div className="text-xl font-bold text-emerald-600 tracking-tight mt-0.5">
+              {isStationScoped
+                ? `${selectedStation.subStations.length} Remote Sensors`
+                : `${ALL_STSS_SUBSTATIONS.length} National STSS`}
             </div>
-            <span className="text-[11px] text-slate-500 block">
-              {isPcpRestricted ? 'San Luis, Aurora Satellite Sensor' : 'Real-time telemetry feeds'}
+            <span className="text-[11px] text-slate-500 block truncate">
+              {isStationScoped
+                ? selectedStation.subStations.map((s) => s.code).join(', ') || 'Direct Telemetry'
+                : 'Real-time telemetry feeds'}
             </span>
           </div>
         </div>
@@ -243,11 +682,15 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
             <span className="text-xs font-semibold text-indigo-800 block">
               Covered Provinces
             </span>
-            <div className="text-2xl font-bold text-indigo-700 tracking-tight mt-0.5">
-              {isPcpRestricted ? `${selectedStation.provinces.length} Provinces` : '82'}
+            <div className="text-xl font-bold text-indigo-700 tracking-tight mt-0.5">
+              {isStationScoped
+                ? `${selectedStation.provinces.length} Provinces`
+                : '82 Provinces'}
             </div>
-            <span className="text-[11px] text-slate-500 block">
-              {isPcpRestricted ? 'Nueva Ecija, Aurora, Bulacan...' : '100% Nationwide AOR Coverage'}
+            <span className="text-[11px] text-slate-500 block truncate">
+              {isStationScoped
+                ? selectedStation.provinces.slice(0, 3).join(', ') + '...'
+                : '100% Nationwide AOR Coverage'}
             </span>
           </div>
         </div>
@@ -259,427 +702,250 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-700 block">
-              {isPcpRestricted ? 'Account Scope' : 'Boundary & PSGC Dataset'}
+              {isStationScoped ? 'Station Account Scope' : 'Leaflet GIS Dataset'}
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
               <span className="text-base font-bold text-emerald-600">
-                {isPcpRestricted ? 'PCP AOR Exclusively' : 'Official v2025.04.01'}
+                {isStationScoped ? `${selectedStation.code} Exclusive` : 'PSA PSGC 2024'}
               </span>
             </div>
             <span className="text-xs text-slate-500 block mt-0.5">
-              {isPcpRestricted ? 'Palayan User Account Restriction' : 'Point-in-Polygon & Demographics'}
+              {isStationScoped ? `${selectedStation.name} Role` : 'Point-in-Polygon & NAMRIA Datum'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 2. Main Content: Map Container (Left) + Selected Station Boundary (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column (Map): 8 cols */}
-        <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden relative min-h-[620px] flex flex-col select-none">
+      {/* 2. Main Content: Map Container (Left) + Selected Station Boundary Card (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        {/* Left Column: Leaflet Interactive Map with subtle dark blue gradient background (8 cols) */}
+        <div className="lg:col-span-8 bg-gradient-to-b from-[#071326] via-[#0d2146] to-[#15326a] rounded-2xl border border-slate-800 shadow-md overflow-hidden relative min-h-[620px] flex flex-col select-none">
           {/* Floating Legend Box in Top Left */}
-          <div className="absolute top-4 left-4 z-20 bg-white/95 backdrop-blur-xs border border-slate-200/90 rounded-xl p-3 shadow-md text-xs space-y-2 max-w-[240px]">
+          <div className="absolute top-4 left-4 z-20 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-xl text-xs space-y-2 max-w-[260px] text-white pointer-events-auto">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-slate-900 text-xs tracking-tight">Active Station</h4>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">
+              <h4 className="font-bold text-white text-xs tracking-tight flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                Station Boundaries
+              </h4>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-600 text-white font-bold">
                 {selectedStation.code}
               </span>
             </div>
-            <div className="text-[11px] text-slate-600 leading-tight">
+            <div className="text-[11px] text-slate-300 leading-tight">
               <strong>{selectedStation.name}</strong> ({selectedStation.islandGroup})
             </div>
-            <div className="space-y-1.5 pt-1 border-t border-slate-100 text-[11px]">
+            <div className="space-y-1.5 pt-1 border-t border-slate-800 text-[11px]">
               <div className="flex items-center gap-2">
                 <span
-                  className="w-3.5 h-3.5 rounded-full border-2 border-white ring-2 flex items-center justify-center shrink-0 shadow-xs"
-                  style={{
-                    backgroundColor: selectedStation.dotColor,
-                    color: selectedStation.dotColor,
-                  }}
+                  className="w-3.5 h-3.5 rounded-full border border-white flex items-center justify-center shrink-0 shadow-xs"
+                  style={{ backgroundColor: selectedStation.dotColor }}
                 />
-                <span className="text-slate-700 font-semibold">SCSS Controlling Hub</span>
+                <span className="text-slate-200 font-semibold">SCSS Controlling Hub</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 inline-block shrink-0" />
-                <span className="text-slate-600">STSS Satellite Sensors ({selectedStation.subStations.length})</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/30 inline-block shrink-0" />
+                <span className="text-slate-300">STSS Satellite Sensors ({selectedStation.subStations.length})</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-xs bg-blue-100 border border-blue-400 inline-block shrink-0" />
-                <span className="text-slate-600">AOR Primary Polygon</span>
+                <span className="w-3 h-3 rounded-xs bg-sky-500/40 border border-sky-400 inline-block shrink-0" />
+                <span className="text-slate-300">
+                  {isStationScoped ? `${selectedStation.code} AOR Provinces` : 'Station AOR Provinces'}
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 border border-dashed border-slate-400 inline-block shrink-0" />
-                <span className="text-slate-600">Provincial Boundaries</span>
+                <span className="w-3 h-3 rounded-full bg-rose-500/80 border border-white inline-block shrink-0" />
+                <span className="text-slate-300">Earthquake Epicenters</span>
+              </div>
+              <div className="pt-2 mt-1 border-t border-slate-800 flex items-center justify-between text-[10px]">
+                <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {basemapType === 'light' ? 'Esri Street (Light Mode - Active)' : basemapType === 'dark' ? 'Esri Dark Canvas (Active)' : basemapType === 'topo' ? 'Esri Topo (Active)' : 'Esri Satellite (Active)'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowApiKeyModal(true)}
+                  className="text-cyan-400 hover:text-cyan-300 font-semibold underline ml-1 cursor-pointer"
+                  title="Configure or view Map API Key"
+                >
+                  Map Key Info
+                </button>
               </div>
             </div>
           </div>
 
           {/* Floating Map Controls in Top Right */}
-          <div className="absolute top-4 right-4 z-20 flex flex-col bg-white border border-slate-200/90 rounded-lg shadow-md divide-y divide-slate-100 overflow-hidden text-slate-700">
+          {/* Hovered Province Indicator Badge */}
+          {hoveredProvince && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-slate-950/92 backdrop-blur-md border border-cyan-400/80 px-4 py-1.5 rounded-full text-xs font-semibold text-white shadow-2xl flex items-center gap-2 animate-in fade-in zoom-in-95 pointer-events-none">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping inline-block" />
+              <span className="text-cyan-300 font-bold tracking-wide">{hoveredProvince}</span>
+              <span className="text-[10px] text-slate-300 font-mono">({selectedStation.code} AOR)</span>
+            </div>
+          )}
+
+          <div className="absolute top-4 right-4 z-20 flex flex-col bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-xl divide-y divide-slate-800 overflow-hidden text-slate-200 pointer-events-auto">
             <button
               type="button"
-              onClick={handleZoomIn}
-              className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 transition-colors"
+              onClick={() => mapInstanceRef.current?.zoomIn()}
+              className="w-8 h-8 flex items-center justify-center hover:bg-slate-800 transition-colors"
               title="Zoom In"
             >
               <Plus className="w-4 h-4" />
             </button>
             <button
               type="button"
-              onClick={handleZoomOut}
-              className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 transition-colors"
+              onClick={() => mapInstanceRef.current?.zoomOut()}
+              className="w-8 h-8 flex items-center justify-center hover:bg-slate-800 transition-colors"
               title="Zoom Out"
             >
               <Minus className="w-4 h-4" />
             </button>
             <button
               type="button"
-              onClick={handleReset}
-              className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 transition-colors text-blue-600"
-              title="Recenter"
+              onClick={handleRecenter}
+              className="w-8 h-8 flex items-center justify-center hover:bg-slate-800 transition-colors text-cyan-400"
+              title="Recenter Station AOR"
             >
               <Crosshair className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setBasemapType((prev) => (prev === 'light' ? 'dark' : 'light'))}
+              className={`w-8 h-8 flex items-center justify-center transition-colors ${
+                basemapType === 'light'
+                  ? 'text-amber-400 hover:text-amber-300'
+                  : 'text-indigo-400 hover:text-indigo-300'
+              }`}
+              title={`Switch to ${basemapType === 'light' ? 'Dark Mode' : 'Light Mode (Default)'}`}
+            >
+              {basemapType === 'light' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowLayersMenu(!showLayersMenu)}
-                className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 transition-colors"
-                title="Toggle Layers"
+                className="w-8 h-8 flex items-center justify-center hover:bg-slate-800 transition-colors"
+                title="Toggle Layers & Basemap"
               >
                 <Layers className="w-4 h-4" />
               </button>
+
+              {/* Layers Dropdown */}
               {showLayersMenu && (
-                <div className="absolute right-9 top-0 bg-white border border-slate-200 rounded-lg shadow-lg p-2.5 text-[11px] w-48 space-y-2 z-30">
-                  <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider">
-                    Layers
+                <div className="absolute top-0 right-10 bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-3 shadow-2xl z-30 w-52 space-y-2 text-xs text-slate-200">
+                  <div className="font-bold text-white border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                    <span>Map Layers</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowLayersMenu(false)}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      ✕
+                    </button>
                   </div>
+
+                  {isAdmin && (
+                    <label className="flex items-center gap-2 cursor-pointer text-cyan-300 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={showAllStationsAdmin}
+                        onChange={(e) => setShowAllStationsAdmin(e.target.checked)}
+                        className="rounded text-cyan-500 bg-slate-800"
+                      />
+                      <span>Show All AOR Provinces</span>
+                    </label>
+                  )}
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showProvinces}
+                      onChange={(e) => setShowProvinces(e.target.checked)}
+                      className="rounded text-blue-600 bg-slate-800"
+                    />
+                    <span>Province Boundaries</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showStationBoundary}
+                      onChange={(e) => setShowStationBoundary(e.target.checked)}
+                      className="rounded text-blue-600 bg-slate-800"
+                    />
+                    <span>Station AOR Polygon</span>
+                  </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={showSubStations}
                       onChange={(e) => setShowSubStations(e.target.checked)}
-                      className="rounded text-blue-600"
+                      className="rounded text-blue-600 bg-slate-800"
                     />
-                    <span>STSS Satellite Nodes</span>
+                    <span>Satellite STSS Stations</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={showEpicenters}
                       onChange={(e) => setShowEpicenters(e.target.checked)}
-                      className="rounded text-blue-600"
+                      className="rounded text-blue-600 bg-slate-800"
                     />
                     <span>Earthquake Epicenters</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showProvinces}
-                      onChange={(e) => setShowProvinces(e.target.checked)}
-                      className="rounded text-blue-600"
-                    />
-                    <span>Province Borders</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showBoundaryReview}
-                      onChange={(e) => setShowBoundaryReview(e.target.checked)}
-                      className="rounded text-blue-600"
-                    />
-                    <span>Boundary Reviews</span>
-                  </label>
+
+                  <div className="pt-2 border-t border-slate-800">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">
+                      Basemap Style (No Watermarks)
+                    </span>
+                    <div className="grid grid-cols-2 gap-1 text-[10px]">
+                      {(['light', 'dark', 'topo', 'satellite'] as const).map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setBasemapType(type)}
+                          className={`px-1.5 py-1 rounded capitalize font-medium ${
+                            basemapType === type
+                              ? 'bg-blue-600 text-white font-bold'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          {type === 'light' ? '☀️ Light (Def)' : type === 'dark' ? '🌙 Dark' : type === 'topo' ? '⛰️ Topo' : '🛰️ Sat'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Map SVG Viewport */}
-          <div className="w-full flex-1 relative bg-slate-50 overflow-hidden flex items-center justify-center">
-            <svg
-              viewBox="0 0 740 760"
-              className="w-full h-full max-h-[660px] object-contain transition-transform duration-200 ease-out"
-              style={{
-                transform: `scale(${zoomLevel}) translate(${panOffset.x}px, ${panOffset.y}px)`,
-              }}
-            >
-              {/* Soft Oceanic Background Grid */}
-              <defs>
-                <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" strokeWidth="0.5" />
-                </pattern>
-                {/* Radial gradient for SCSS active beacon */}
-                <radialGradient id="beacon-glow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor={selectedStation.dotColor} stopOpacity="0.4" />
-                  <stop offset="100%" stopColor={selectedStation.dotColor} stopOpacity="0" />
-                </radialGradient>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid-pattern)" />
-
-              {/* Geographic Archipelago Contours (Accurate Philippine Outline) */}
-              <g id="philippines-landmass">
-                {/* Batanes & Babuyan Islands */}
-                <ellipse cx="350" cy="90" rx="10" ry="7" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
-                <ellipse cx="345" cy="115" rx="8" ry="6" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
-
-                {/* Luzon Mainland Contour */}
-                <path
-                  d="M312,140 Q348,128 365,142 Q378,170 372,210 Q382,240 375,270 Q365,300 352,320 Q335,340 315,338 Q298,315 305,285 Q308,245 306,210 Q305,190 312,140 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1.2"
-                />
-                {/* Bicol Peninsula */}
-                <path
-                  d="M375,270 Q405,280 435,320 Q445,350 425,370 Q398,350 382,310 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1.2"
-                />
-
-                {/* Mindoro Island */}
-                <path
-                  d="M272,305 Q302,295 308,328 Q298,360 270,345 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-                {/* Palawan Island Strip */}
-                <path
-                  d="M175,410 Q215,480 235,530 Q225,540 195,490 Q165,420 175,410 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1.1"
-                />
-
-                {/* Visayas Major Islands */}
-                {/* Panay */}
-                <path
-                  d="M318,390 Q348,385 352,415 Q328,435 312,415 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-                {/* Negros */}
-                <path
-                  d="M358,420 Q372,415 378,450 Q368,480 352,470 Q348,440 358,420 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-                {/* Cebu */}
-                <path
-                  d="M382,415 Q390,410 395,440 Q388,470 380,465 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-                {/* Bohol */}
-                <ellipse cx="405" cy="455" rx="14" ry="10" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
-                {/* Leyte */}
-                <path
-                  d="M415,395 Q435,395 430,435 Q415,450 410,420 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-                {/* Samar */}
-                <path
-                  d="M430,355 Q460,360 460,400 Q435,415 425,380 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-
-                {/* Mindanao Main Landmass */}
-                <path
-                  d="M395,495 Q445,485 470,510 Q480,550 475,595 Q455,625 415,615 Q385,605 375,575 Q360,570 330,585 Q285,590 275,575 Q290,555 320,560 Q350,560 365,535 Q380,515 395,495 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1.3"
-                />
-                {/* Zamboanga Peninsula */}
-                <path
-                  d="M330,555 Q295,560 275,575 Q285,590 320,580 Z"
-                  fill="#f1f5f9"
-                  stroke="#cbd5e1"
-                  strokeWidth="1"
-                />
-                {/* Sulu & Tawi-Tawi Chain */}
-                <ellipse cx="256" cy="620" rx="8" ry="4" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.8" />
-                <ellipse cx="230" cy="640" rx="8" ry="4" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.8" />
-              </g>
-
-              {/* Province Boundaries (Dashed Lines) */}
-              {showProvinces && (
-                <g id="province-boundaries" opacity="0.65">
-                  <path d="M305,160 L365,160" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                  <path d="M300,205 L372,205" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                  <path d="M310,240 L370,240" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                  <path d="M305,275 L350,275" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                  <path d="M410,320 L445,340" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                  <path d="M400,530 L465,530" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                  <path d="M380,565 L460,565" stroke="#94a3b8" strokeWidth="0.9" strokeDasharray="3 3" />
-                </g>
-              )}
-
-              {/* Connecting Telemetry Beams from SCSS to each subordinate STSS */}
-              {showSubStations && (
-                <g id="telemetry-beams">
-                  {selectedStation.subStations.map((stss) => {
-                    const subPos = projectCoords(stss.coordinates[0], stss.coordinates[1]);
-                    return (
-                      <line
-                        key={`beam-${stss.code}`}
-                        x1={scssPos.x}
-                        y1={scssPos.y}
-                        x2={subPos.x}
-                        y2={subPos.y}
-                        stroke={selectedStation.strokeColor}
-                        strokeWidth="1.2"
-                        strokeDasharray="4 3"
-                        strokeOpacity="0.5"
-                      />
-                    );
-                  })}
-                </g>
-              )}
-
-              {/* Subordinate STSS Satellite Stations Markers */}
-              {showSubStations && (
-                <g id="substations-layer">
-                  {selectedStation.subStations.map((stss) => {
-                    const subPos = projectCoords(stss.coordinates[0], stss.coordinates[1]);
-                    const isSelected = selectedSubStation?.code === stss.code;
-                    return (
-                      <g
-                        key={`stss-${stss.code}`}
-                        className="cursor-pointer group"
-                        onClick={() => setSelectedSubStation(stss)}
-                      >
-                        <circle
-                          cx={subPos.x}
-                          cy={subPos.y}
-                          r={isSelected ? 6.5 : 4.5}
-                          fill="#10b981"
-                          stroke="#ffffff"
-                          strokeWidth="1.5"
-                          className="transition-all"
-                        />
-                        <text
-                          x={subPos.x + 7}
-                          y={subPos.y + 3}
-                          fontSize="9"
-                          fontWeight="bold"
-                          fill="#0f172a"
-                          className="select-none pointer-events-none drop-shadow-xs"
-                        >
-                          {stss.code}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </g>
-              )}
-
-              {/* Active SCSS Controlling Hub Marker (Pulsing Center) */}
-              <g id="scss-hub-marker" className="cursor-pointer">
-                {/* Outer Glow / Ping */}
-                <circle
-                  cx={scssPos.x}
-                  cy={scssPos.y}
-                  r="24"
-                  fill="url(#beacon-glow)"
-                  className="animate-pulse"
-                />
-                <circle
-                  cx={scssPos.x}
-                  cy={scssPos.y}
-                  r="9"
-                  fill={selectedStation.dotColor}
-                  fillOpacity="0.25"
-                  stroke={selectedStation.strokeColor}
-                  strokeWidth="1.5"
-                  strokeDasharray="3 2"
-                />
-                <circle
-                  cx={scssPos.x}
-                  cy={scssPos.y}
-                  r="6"
-                  fill={selectedStation.dotColor}
-                  stroke="#ffffff"
-                  strokeWidth="2"
-                  className="shadow-lg"
-                />
-                {/* Station Code Label Banner */}
-                <rect
-                  x={scssPos.x - 22}
-                  y={scssPos.y - 24}
-                  width="44"
-                  height="16"
-                  rx="4"
-                  fill="#0f172a"
-                  fillOpacity="0.9"
-                />
-                <text
-                  x={scssPos.x}
-                  y={scssPos.y - 13}
-                  textAnchor="middle"
-                  fontSize="9.5"
-                  fontWeight="bold"
-                  fill="#ffffff"
-                  className="select-none pointer-events-none"
-                >
-                  {selectedStation.code}
-                </text>
-              </g>
-
-              {/* Major Island Group Region Typography */}
-              <text
-                x="320"
-                y="180"
-                className="font-serif italic text-slate-400 text-lg tracking-wider pointer-events-none select-none"
-              >
-                Luzon
-              </text>
-              <text
-                x="348"
-                y="390"
-                className="font-serif italic text-slate-400 text-base tracking-wider pointer-events-none select-none"
-              >
-                Visayas
-              </text>
-              <text
-                x="368"
-                y="580"
-                className="font-serif italic text-slate-400 text-lg tracking-wider pointer-events-none select-none"
-              >
-                Mindanao
-              </text>
-            </svg>
-          </div>
+          {/* Leaflet Map DOM Element with subtle gradient */}
+          <div
+            ref={mapContainerRef}
+            className="w-full flex-1 z-0"
+            style={{ minHeight: '580px', background: 'transparent' }}
+          />
 
           {/* SubStation Quick Inspection Footer inside Map */}
           {selectedSubStation && (
-            <div className="bg-emerald-50 border-t border-emerald-200 p-2.5 px-4 flex items-center justify-between text-xs text-emerald-950 animate-in fade-in duration-150">
+            <div className="bg-slate-900/90 backdrop-blur-xs border-t border-slate-800 p-2.5 px-4 flex items-center justify-between text-xs text-white z-20">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-300 shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/30 shrink-0" />
                 <span className="font-bold">
                   STSS {selectedSubStation.code}: {selectedSubStation.name}
                 </span>
-                <span className="text-emerald-700 font-medium">
+                <span className="text-emerald-300 font-medium">
                   &bull; {selectedSubStation.location} ({selectedSubStation.province})
                 </span>
-                <span className="text-[11px] text-emerald-600 font-mono">
+                <span className="text-[11px] text-slate-400 font-mono">
                   [{selectedSubStation.coordinates[0].toFixed(3)}°N, {selectedSubStation.coordinates[1].toFixed(3)}°E]
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedSubStation(null)}
-                className="text-emerald-600 hover:text-emerald-900 font-bold text-xs ml-2"
+                className="text-slate-400 hover:text-white font-bold text-xs ml-2"
               >
                 ✕
               </button>
@@ -687,25 +953,32 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
           )}
         </div>
 
-        {/* Right Column: Selected Station Boundary & AOR Specs (4 cols) */}
+        {/* Right Column: Selected Station Boundary Card (Only show selected AOR; if CGP only show CGP AOR) (4 cols) */}
         <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 tracking-tight">
-                Selected Station Boundary
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                  Selected Station Boundary
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {isStationScoped
+                    ? `Exclusive station scope: ${selectedStation.code} AOR`
+                    : 'Showing approved station AOR & province allocation'}
+                </p>
+              </div>
               <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                 SCSS Hub
               </span>
             </div>
 
-            {/* Station Dropdown Selector with Search & Island Filter */}
+            {/* Station Dropdown Selector (Locked if station-scoped, e.g. CGP only shows CGP) */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => !isPcpRestricted && setIsDropdownOpen(!isDropdownOpen)}
+                onClick={() => !isStationScoped && setIsDropdownOpen(!isDropdownOpen)}
                 className={`w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between shadow-2xs transition-colors ${
-                  isPcpRestricted
+                  isStationScoped
                     ? 'cursor-default ring-1 ring-blue-200 bg-blue-50/20'
                     : 'hover:border-blue-500 cursor-pointer'
                 }`}
@@ -720,11 +993,11 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
                       {selectedStation.code} - {selectedStation.name}
                     </span>
                     <span className="text-[10px] text-slate-500 block truncate">
-                      {selectedStation.islandGroup} &bull; {selectedStation.subStations.length} Satellite Station (SLLP)
+                      {selectedStation.islandGroup} &bull; {selectedStation.subStations.length} Satellite Sensors
                     </span>
                   </div>
                 </div>
-                {isPcpRestricted ? (
+                {isStationScoped ? (
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200 shrink-0 ml-2">
                     Station Locked
                   </span>
@@ -733,8 +1006,8 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
                 )}
               </button>
 
-              {/* Dropdown Menu */}
-              {isDropdownOpen && (
+              {/* Dropdown Menu (Only shown for Admin or non-restricted accounts) */}
+              {!isStationScoped && isDropdownOpen && (
                 <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-30 overflow-hidden flex flex-col max-h-[360px]">
                   {/* Search and Island Filter Bar */}
                   <div className="p-2 border-b border-slate-100 space-y-2 bg-slate-50/70">
@@ -744,7 +1017,7 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
                         type="text"
                         value={stationSearch}
                         onChange={(e) => setStationSearch(e.target.value)}
-                        placeholder="Search 29 stations or provinces..."
+                        placeholder="Search 15 stations or provinces..."
                         className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                         autoFocus
                       />
@@ -770,7 +1043,7 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
                   {/* List of Stations */}
                   <div className="overflow-y-auto divide-y divide-slate-100 py-1 flex-1">
                     {filteredDropdownStations.map((st) => {
-                      const isCurrent = st.code === selectedStationCode;
+                      const isCurrent = st.code === activeStationCode;
                       return (
                         <button
                           key={st.code}
@@ -802,17 +1075,12 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
                         </button>
                       );
                     })}
-                    {filteredDropdownStations.length === 0 && (
-                      <div className="p-4 text-center text-xs text-slate-500">
-                        No seismic stations found matching "{stationSearch}"
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Detailed Properties Table */}
+            {/* Detailed Properties Table for the Selected Station */}
             <div className="space-y-3 text-xs">
               {/* Station Code & Island */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -855,18 +1123,24 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
               <div className="border-b border-slate-100 pb-2.5">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-slate-500 font-medium">
-                    Covered Provinces ({selectedStation.provinces.length})
+                    Covered Provinces (
+                    {activeStationCode === 'CGP'
+                      ? CGP_AOR_PROVINCES.length
+                      : selectedStation.provinces.length}
+                    )
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {selectedStation.provinces.map((prov) => (
-                    <span
-                      key={prov}
-                      className="bg-slate-100 text-slate-700 text-[10px] font-medium px-2 py-0.5 rounded border border-slate-200"
-                    >
-                      {prov}
-                    </span>
-                  ))}
+                  {(activeStationCode === 'CGP' ? CGP_AOR_PROVINCES : selectedStation.provinces).map(
+                    (prov) => (
+                      <span
+                        key={prov}
+                        className="bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded border border-blue-200"
+                      >
+                        {prov}
+                      </span>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -904,153 +1178,105 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <span className="text-slate-400 italic text-[11px]">
-                    Direct single-sensor station (No external STSS)
+                  <span className="text-slate-400 text-[11px] italic">
+                    Direct seismic telemetry node
                   </span>
                 )}
               </div>
 
-              {/* Boundary Dataset & Version */}
+              {/* Municipalities & Coverage */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500 font-medium">Dataset Version</span>
-                <span className="text-slate-800 font-mono font-medium">
-                  {selectedStation.dataset} ({selectedStation.version})
+                <span className="text-slate-500 font-medium">Jurisdictions</span>
+                <span className="text-slate-700 font-medium">
+                  {selectedStation.municipalitiesCities}
                 </span>
               </div>
 
-              {/* Last Validated */}
-              <div className="flex items-start justify-between">
-                <span className="text-slate-500 font-medium shrink-0">
-                  Last Validated
+              {/* Demographic Population */}
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-slate-500 font-medium">Est. Population</span>
+                <span className="font-mono text-slate-900 font-bold">
+                  {activeStationCode === 'CGP' ? '5,022,768 (PSA 2024)' : '3,124,560'}
                 </span>
-                <div className="text-right">
-                  <span className="text-slate-900 font-semibold block text-[11px]">
-                    {selectedStation.lastValidated}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block">
-                    {selectedStation.validatedBy}
-                  </span>
-                </div>
               </div>
             </div>
-
-            {/* Official PSGC Demographics Profile Card (if available for MIMAROPA) */}
-            {selectedStation.demographics && selectedStation.demographics.length > 0 && (
-              <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3 space-y-2 text-xs">
-                <div className="flex items-center justify-between font-bold text-indigo-900 text-[11px]">
-                  <span className="flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                    Official PSGC Demographics
-                  </span>
-                  <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
-                    Region IV-B
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {selectedStation.demographics.map((demo) => (
-                    <div
-                      key={demo.province}
-                      className="bg-white/90 p-2 rounded-lg border border-indigo-100 text-[11px] space-y-1"
-                    >
-                      <div className="flex items-center justify-between font-bold text-slate-800">
-                        <span>{demo.province}</span>
-                        <span className="font-mono text-[10px] text-indigo-600">
-                          PSGC: {demo.psgcCode}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-600 text-[10px]">
-                        <span>LGUs: {demo.lguCount}</span>
-                        <span className="font-semibold text-slate-800">
-                          Pop: {demo.population.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Action Buttons: 2x2 Grid */}
-          <div className="grid grid-cols-2 gap-2.5 pt-5">
-            <button
-              type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-colors shadow-xs"
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-              <span>Edit Boundary</span>
-            </button>
+          {/* Action Buttons in Card */}
+          <div className="pt-4 border-t border-slate-100 space-y-2 mt-4">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleValidateGIS}
+                className="w-full py-2 px-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                title="Run point-in-polygon verification check against GIS master"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Validate GIS</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportMap}
+                className="w-full py-2 px-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                title="Download AOR GeoJSON boundary definition"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Export GeoJSON</span>
+              </button>
+            </div>
 
             <button
               type="button"
-              onClick={handleValidateGIS}
-              className="bg-white hover:bg-blue-50/50 border border-blue-600 text-blue-600 font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-colors shadow-2xs"
+              onClick={handleRecenter}
+              className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              <span>Validate GIS</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onNavigateToRecords}
-              className="bg-white hover:bg-blue-50/50 border border-blue-600 text-blue-600 font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-colors shadow-2xs"
-            >
-              <FileText className="w-3.5 h-3.5 text-blue-600" />
-              <span>View Records</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportMap}
-              className="bg-white hover:bg-blue-50/50 border border-blue-600 text-blue-600 font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-colors shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-blue-600" />
-              <span>Export AOR</span>
+              <Crosshair className="w-3.5 h-3.5" />
+              <span>Center Leaflet Map on {selectedStation.code}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 3. Comprehensive STSS Satellite Telemetered Stations Table */}
+      {/* 3. Sub-Stations Table Overview */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Satellite Telemetered Seismic Stations (STSS) Network
+            <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-600" />
+              Satellite Telemetered Seismic Stations (STSS) &bull; {selectedStation.code}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Remote seismic observation stations reporting to{' '}
-              <strong className="text-slate-800 font-semibold">
-                {selectedStation.code} - {selectedStation.name}
-              </strong>
+            <p className="text-xs text-slate-500">
+              Field seismic sensors relaying continuous waveforms into {selectedStation.fullName}
             </p>
           </div>
-          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            {selectedStation.subStations.length} Stations Online
+          <span className="text-xs font-semibold text-slate-600 font-mono">
+            {selectedStation.subStations.length} Registered Remote Sensor(s)
           </span>
         </div>
 
         {selectedStation.subStations.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500 tracking-wider border-b border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-700">
                 <tr>
-                  <th className="px-4 py-3">STSS Code</th>
-                  <th className="px-4 py-3">Station Name</th>
-                  <th className="px-4 py-3">Geographic Location</th>
-                  <th className="px-4 py-3">Province</th>
-                  <th className="px-4 py-3">GPS Coordinates</th>
-                  <th className="px-4 py-3">Controlling SCSS</th>
-                  <th className="px-4 py-3 text-right">Telemetry Status</th>
+                  <th className="px-4 py-2.5">STSS Code</th>
+                  <th className="px-4 py-2.5">Station Name</th>
+                  <th className="px-4 py-2.5">Location</th>
+                  <th className="px-4 py-2.5">Province</th>
+                  <th className="px-4 py-2.5">Coordinates</th>
+                  <th className="px-4 py-2.5">Controlling SCSS</th>
+                  <th className="px-4 py-2.5 text-right">Telemetry Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {selectedStation.subStations.map((stss) => (
                   <tr
                     key={stss.code}
-                    className="hover:bg-slate-50/80 transition-colors"
+                    onClick={() => {
+                      setSelectedSubStation(stss);
+                      mapInstanceRef.current?.flyTo([stss.coordinates[0], stss.coordinates[1]], 10);
+                    }}
+                    className="hover:bg-blue-50/40 transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-3 font-mono font-bold text-blue-700">
                       {stss.code}
@@ -1094,101 +1320,100 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
         )}
       </div>
 
-      {/* Edit Boundary Modal */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: selectedStation.dotColor }}
-                />
-                <h3 className="font-bold text-slate-900 text-sm">
-                  Edit Boundary: {selectedStation.fullName}
-                </h3>
+      {/* Map API Key & Cartography Provider Modal */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Map API & Cartography Provider</h3>
+                  <p className="text-[11px] text-slate-500">AOR Boundary and Leaflet Map Service Configuration</p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
+                onClick={() => {
+                  setShowApiKeyModal(false);
+                  setApiKeyNotice(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            {/* Content */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-xl p-3.5 text-emerald-900 space-y-1">
+                <div className="flex items-center gap-2 font-bold text-emerald-950">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Active Map Engine: Open GIS &amp; Esri Cartography (100% Free &amp; Zero Watermarks)
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  All watermarks and &quot;API key required&quot; notices have been removed. Leaflet streams directly via Esri World Street (Default Light Mode), Esri Dark Canvas, Topographic, and Satellite imagery with zero cost and no external paid key required.
+                </p>
+              </div>
+
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Station Name
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Optional Custom Map API Key (Mapbox / Stadia / Custom Tile Server)
                 </label>
                 <input
                   type="text"
-                  defaultValue={selectedStation.name}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  value={customApiKey}
+                  onChange={(e) => setCustomApiKey(e.target.value)}
+                  placeholder="e.g., pk.eyJ1IjoiZXhhbXBsZSI... (Optional)"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
                 />
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  Synchronized across <strong>Dashboard Map</strong>, <strong>Station Boundaries</strong>, and <strong>Boundary Review</strong>. Built-in Esri GIS services power all maps with zero watermark and zero cost.
+                </span>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Covered Provinces (Comma Separated)
-                </label>
-                <textarea
-                  defaultValue={selectedStation.provinces.join(', ')}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Buffer Tolerance (km)
-                  </label>
-                  <input
-                    type="number"
-                    defaultValue={5.0}
-                    step={0.5}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
-                  />
+              {apiKeyNotice && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-blue-800 text-[11px] font-medium flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span>{apiKeyNotice}</span>
                 </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Boundary Approval Status
-                  </label>
-                  <select
-                    defaultValue={selectedStation.status}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
-                  >
-                    <option value="Approved">Approved</option>
-                    <option value="Pending Review">Pending Review</option>
-                    <option value="Under Audit">Under Audit</option>
-                  </select>
-                </div>
-              </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsEditModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setActionNotice(
-                    `Boundary configuration for ${selectedStation.code} updated and saved to audit log.`
-                  );
-                  setTimeout(() => setActionNotice(null), 4000);
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors shadow-xs"
-              >
-                Save Changes
-              </button>
+            {/* Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[10px] text-slate-500">
+                Leaflet v1.9.4 / PSGC 2024
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowApiKeyModal(false);
+                    setApiKeyNotice(null);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-white transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('alertx_map_api_key', customApiKey.trim());
+                    setApiKeyNotice('API configuration saved successfully.');
+                    setTimeout(() => {
+                      setShowApiKeyModal(false);
+                      setApiKeyNotice(null);
+                    }, 1200);
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-xs transition-colors"
+                >
+                  Save Configuration
+                </button>
+              </div>
             </div>
           </div>
         </div>

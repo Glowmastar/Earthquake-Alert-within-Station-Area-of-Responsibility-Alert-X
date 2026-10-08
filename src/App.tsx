@@ -31,7 +31,9 @@ import { AORRulesView } from './views/AORRulesView';
 import { RolesView } from './views/RolesView';
 import { LoginView } from './views/LoginView';
 import { EmailDesignTemplateView } from './views/EmailDesignTemplateView';
+import { TestEmailView } from './views/TestEmailView';
 import { AdministrationSettingsView } from './views/AdministrationSettingsView';
+import { VersionHistoryView } from './views/VersionHistoryView';
 
 import { INITIAL_EARTHQUAKES, INITIAL_RECIPIENTS } from './data/mockData';
 import { EarthquakeRecord, Recipient, UserProfile, PRECONFIGURED_USERS } from './types';
@@ -64,19 +66,21 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('alertx_auth') !== 'false';
   });
-  const [currentView, setCurrentView] = useState<string>('settings');
+  const [currentView, setCurrentView] = useState<string>('dashboard');
   const [recordFilter, setRecordFilter] = useState<string>('INSIDE_AOR');
   const [mapSubView, setMapSubView] = useState<'STATION_BOUNDARIES' | 'BOUNDARY_REVIEW'>('BOUNDARY_REVIEW');
-  const [settingsSubView, setSettingsSubView] = useState<'GENERAL' | 'AOR_RULES' | 'EQINFO_SOURCE' | 'ROLES'>('GENERAL');
+  const [settingsSubView, setSettingsSubView] = useState<'GENERAL' | 'AOR_RULES' | 'EQINFO_SOURCE' | 'ROLES' | 'VERSION_HISTORY'>('GENERAL');
+  const [emailSubView, setEmailSubView] = useState<'DESIGN_TEMPLATE' | 'TEST_EMAIL'>('TEST_EMAIL');
   const [exceptionFilter, setExceptionFilter] = useState<string>('ALL');
 
   // Main State
   const [earthquakes, setEarthquakes] = useState<EarthquakeRecord[]>(INITIAL_EARTHQUAKES);
   const [recipients, setRecipients] = useState<Recipient[]>(INITIAL_RECIPIENTS);
   const [selectedEarthquake, setSelectedEarthquake] = useState<EarthquakeRecord | null>(null);
+  const [mapIdentifiedEarthquake, setMapIdentifiedEarthquake] = useState<EarthquakeRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isFetchingLive, setIsFetchingLive] = useState<boolean>(false);
-  const [lastLiveSyncTime, setLastLiveSyncTime] = useState<string>('');
+  const [lastLiveSyncTime, setLastLiveSyncTime] = useState<string>(() => new Date().toISOString());
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(() => {
     return localStorage.getItem('alertx_sidebar_hidden') === 'true';
@@ -170,6 +174,11 @@ export default function App() {
     showToast(`New recipient ${newRec.name} added to ${newRec.aor} sector.`);
   };
 
+  const handleDeleteRecipient = (recipientId: string) => {
+    setRecipients((prev) => prev.filter((r) => r.id !== recipientId));
+    showToast('Recipient removed from station registry.');
+  };
+
   const fetchLivePhivolcsData = async (force: boolean = false, silent: boolean = false) => {
     setIsFetchingLive(true);
     try {
@@ -179,13 +188,14 @@ export default function App() {
         const data = await res.json();
         if (data.records && data.records.length > 0) {
           setEarthquakes(data.records);
+          const nowIso = new Date().toISOString();
+          setLastLiveSyncTime(nowIso);
           const nowFormatted = new Intl.DateTimeFormat('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
             hour12: true,
           }).format(new Date());
-          setLastLiveSyncTime(nowFormatted);
           if (!silent) {
             showToast(`Synchronized ${data.records.length.toLocaleString()} updated earthquakes from earthquake.phivolcs.dost.gov.ph (${nowFormatted} PST)`);
           }
@@ -263,6 +273,11 @@ export default function App() {
   };
 
   const navigateTo = (view: string, filter?: string) => {
+    if ((view === 'settings' || view === 'roles') && currentUser?.role !== 'Administrator') {
+      setCurrentView('dashboard');
+      showToast('Administration settings are restricted to administrator accounts.');
+      return;
+    }
     setCurrentView(view);
     if (view === 'records') {
       if (filter) {
@@ -278,12 +293,21 @@ export default function App() {
       } else {
         setExceptionFilter('ALL');
       }
+    } else if (view === 'email') {
+      if (filter === 'TEST_EMAIL') {
+        setEmailSubView('TEST_EMAIL');
+      } else {
+        setEmailSubView('DESIGN_TEMPLATE');
+      }
     } else if (view === 'settings') {
-      if (filter === 'EQINFO_SOURCE' || filter === 'AOR_RULES' || filter === 'ROLES' || filter === 'GENERAL') {
+      if (filter === 'EQINFO_SOURCE' || filter === 'AOR_RULES' || filter === 'ROLES' || filter === 'GENERAL' || filter === 'VERSION_HISTORY') {
         setSettingsSubView(filter);
       } else {
         setSettingsSubView('GENERAL');
       }
+    } else if (view === 'version-history') {
+      setCurrentView('settings');
+      setSettingsSubView('VERSION_HISTORY');
     } else if (view === 'roles') {
       setCurrentView('settings');
       setSettingsSubView('ROLES');
@@ -389,6 +413,15 @@ export default function App() {
           subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
         };
       case 'email':
+        if (emailSubView === 'TEST_EMAIL') {
+          return {
+            title: 'Test Email',
+            subtitle: 'Verify email configuration and delivery using a controlled test message.',
+            breadcrumb: 'Email > Test Email',
+            titleClassName: 'text-2xl font-black text-blue-600 tracking-tight leading-tight',
+            subtitleClassName: 'text-xs text-slate-500 font-normal mt-0.5',
+          };
+        }
         return {
           title: 'Email Design Template',
           subtitle: 'Create and manage branded earthquake alert email layouts',
@@ -397,6 +430,15 @@ export default function App() {
           subtitleClassName: 'text-xs text-blue-600 font-normal mt-0.5',
         };
       case 'settings':
+        if (settingsSubView === 'VERSION_HISTORY') {
+          return {
+            title: 'Version History',
+            subtitle: 'Release history, telemetry rule revisions, and deployment records for Alert X',
+            breadcrumb: 'Dashboard / Administration / Version History',
+            titleClassName: 'text-2xl font-bold text-slate-900 tracking-tight leading-tight',
+            subtitleClassName: 'text-xs text-slate-500 font-normal mt-0.5',
+          };
+        }
         if (settingsSubView === 'GENERAL') {
           return {
             title: 'Administration Settings',
@@ -484,6 +526,9 @@ export default function App() {
           setIsAuthenticated(true);
           localStorage.setItem('alertx_auth', 'true');
           localStorage.setItem('alertx_current_user', JSON.stringify(user));
+          setCurrentView('dashboard');
+          setRecordFilter('ALL');
+          setMapIdentifiedEarthquake(null);
           showToast(
             `Welcome, ${user.name}! ${
               user.assignedAor && user.assignedAor !== 'ALL'
@@ -529,6 +574,8 @@ export default function App() {
             ? mapSubView
             : currentView === 'exceptions'
             ? exceptionFilter
+            : currentView === 'email'
+            ? emailSubView
             : recordFilter
         }
         currentMapSubView={mapSubView}
@@ -588,7 +635,11 @@ export default function App() {
           {currentView === 'dashboard' && (
             <>
               {/* Row 1: System Status Cards (4 cards) */}
-              <StatusCards />
+              <StatusCards
+                lastUpdated={lastLiveSyncTime}
+                onRefresh={() => fetchLivePhivolcsData(true, false)}
+                isRefreshing={isFetchingLive}
+              />
 
               {/* Row 2: 5 Metric Cards */}
               <MetricCards
@@ -612,7 +663,11 @@ export default function App() {
                     earthquakes={scopedEarthquakes}
                     currentUser={currentUser}
                     onSelectEarthquake={setSelectedEarthquake}
-                    selectedEarthquake={selectedEarthquake}
+                    selectedEarthquake={mapIdentifiedEarthquake || selectedEarthquake}
+                    onClearSelectedEarthquake={() => {
+                      setMapIdentifiedEarthquake(null);
+                      setSelectedEarthquake(null);
+                    }}
                     selectedAorFilter={
                       currentUser.assignedAor === 'PCP' || currentUser.assignedAor === 'CGP' || currentUser.assignedAor === 'BIP'
                         ? currentUser.assignedAor
@@ -625,7 +680,13 @@ export default function App() {
                 <div className="lg:col-span-5 flex flex-col space-y-4">
                   <RecentAlertsTable
                     records={scopedEarthquakes}
+                    activeEpicenterId={mapIdentifiedEarthquake?.id}
                     onSelectRecord={setSelectedEarthquake}
+                    onIdentifyEpicenter={(record) => {
+                      setMapIdentifiedEarthquake(record);
+                      showToast(`Epicenter identified on map: ${record.location} (M${record.magnitude.toFixed(1)})`);
+                    }}
+                    onInspectBulletin={setSelectedEarthquake}
                     onViewAllRecords={() => navigateTo('records', 'ALL')}
                     onRefreshData={handleRefreshData}
                     onRunAorCheck={handleRunAorCheck}
@@ -699,15 +760,24 @@ export default function App() {
             <RecipientsView
               recipients={scopedRecipients}
               onAddRecipient={handleAddRecipient}
+              onDeleteRecipient={handleDeleteRecipient}
             />
           )}
 
           {currentView === 'email' && (
-            <EmailDesignTemplateView
-              currentUser={currentUser}
-              onNavigateToAudit={() => navigateTo('audit')}
-              earthquakes={scopedEarthquakes}
-            />
+            emailSubView === 'TEST_EMAIL' ? (
+              <TestEmailView
+                currentUser={currentUser}
+                earthquakes={scopedEarthquakes}
+                onNavigateToAudit={() => navigateTo('audit')}
+              />
+            ) : (
+              <EmailDesignTemplateView
+                currentUser={currentUser}
+                onNavigateToAudit={() => navigateTo('audit')}
+                earthquakes={scopedEarthquakes}
+              />
+            )
           )}
 
           {currentView === 'contacts' && <ContactInformationView currentUser={currentUser} />}
@@ -752,7 +822,7 @@ export default function App() {
             />
           )}
 
-          {currentView === 'settings' && (
+          {currentView === 'settings' && currentUser?.role === 'Administrator' && (
             settingsSubView === 'GENERAL' ? (
               <AdministrationSettingsView
                 currentUser={currentUser}
@@ -763,12 +833,17 @@ export default function App() {
               <RolesView onNavigateToAudit={() => navigateTo('audit')} />
             ) : settingsSubView === 'AOR_RULES' ? (
               <AORRulesView currentUser={currentUser} />
+            ) : settingsSubView === 'VERSION_HISTORY' ? (
+              <VersionHistoryView
+                currentUser={currentUser}
+                onNavigateToAudit={() => navigateTo('audit')}
+              />
             ) : (
               <SettingsView onSync={handleRefreshData} />
             )
           )}
 
-          {currentView === 'roles' && (
+          {currentView === 'roles' && currentUser?.role === 'Administrator' && (
             <RolesView onNavigateToAudit={() => navigateTo('audit')} />
           )}
         </main>

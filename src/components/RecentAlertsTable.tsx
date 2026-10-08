@@ -1,10 +1,13 @@
 import React from 'react';
-import { Eye, RefreshCw, Play, Mail, Download } from 'lucide-react';
+import { Eye, RefreshCw, Play, Mail, Download, MapPin, Radio } from 'lucide-react';
 import { EarthquakeRecord } from '../types';
 
 interface RecentAlertsTableProps {
   records: EarthquakeRecord[];
   onSelectRecord: (record: EarthquakeRecord) => void;
+  onIdentifyEpicenter?: (record: EarthquakeRecord) => void;
+  onInspectBulletin?: (record: EarthquakeRecord) => void;
+  activeEpicenterId?: string | null;
   onViewAllRecords: () => void;
   onRefreshData?: () => void;
   onRunAorCheck?: () => void;
@@ -15,6 +18,9 @@ interface RecentAlertsTableProps {
 export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
   records,
   onSelectRecord,
+  onIdentifyEpicenter,
+  onInspectBulletin,
+  activeEpicenterId,
   onViewAllRecords,
   onRefreshData,
   onRunAorCheck,
@@ -22,6 +28,23 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
   onExportReport,
 }) => {
   const displayRecords = records.slice(0, 5);
+
+  const handleRowClick = (record: EarthquakeRecord) => {
+    if (onIdentifyEpicenter) {
+      onIdentifyEpicenter(record);
+    } else {
+      onSelectRecord(record);
+    }
+  };
+
+  const handleInspect = (e: React.MouseEvent, record: EarthquakeRecord) => {
+    e.stopPropagation();
+    if (onInspectBulletin) {
+      onInspectBulletin(record);
+    } else {
+      onSelectRecord(record);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -57,14 +80,20 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
       {/* Table Card */}
       <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-100">
-          <h3 className="text-base font-bold text-slate-900 tracking-tight">
-            Recent AOR Alerts
-          </h3>
+        <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-100 bg-slate-50/40">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Radio className="w-4 h-4 text-blue-600 animate-pulse" />
+              Recent AOR Alerts
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              Click any earthquake info to identify its epicenter and display it on the map
+            </p>
+          </div>
           <button
             type="button"
             onClick={onViewAllRecords}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors shrink-0"
           >
             View All
           </button>
@@ -85,49 +114,77 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {displayRecords.map((record) => (
-                <tr
-                  key={record.id}
-                  className="hover:bg-blue-50/30 transition-colors"
-                >
-                  <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap text-[11px]">
-                    {record.timePHT}
-                  </td>
-                  <td className="py-3 px-4 font-mono text-blue-600 font-semibold whitespace-nowrap text-[11px]">
-                    {record.id}
-                  </td>
-                  <td className="py-3 px-4">
-                    <button
-                      type="button"
-                      onClick={() => onSelectRecord(record)}
-                      className="text-left font-medium text-blue-600 hover:underline line-clamp-1"
-                    >
-                      {record.location}
-                    </button>
-                  </td>
-                  <td className="py-3 px-3 font-mono font-bold text-slate-800 text-center">
-                    {record.magnitude.toFixed(1)}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="font-semibold text-slate-700 whitespace-nowrap">
-                      {record.aor}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-center whitespace-nowrap">
-                    {getStatusBadge(record.status)}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => onSelectRecord(record)}
-                      className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors inline-flex items-center justify-center"
-                      title="Inspect Event Bulletin"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {displayRecords.map((record) => {
+                const isActive = activeEpicenterId === record.id;
+                return (
+                  <tr
+                    key={record.id}
+                    onClick={() => handleRowClick(record)}
+                    className={`cursor-pointer transition-colors ${
+                      isActive
+                        ? 'bg-blue-50/80 hover:bg-blue-100/70 border-l-4 border-l-blue-600'
+                        : 'hover:bg-blue-50/40'
+                    }`}
+                    title="Click to identify and focus epicenter on map"
+                  >
+                    <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap text-[11px]">
+                      {record.timePHT}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-blue-600 font-semibold whitespace-nowrap text-[11px]">
+                      <span className="flex items-center gap-1">
+                        {record.id}
+                        {isActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping inline-block" />
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col">
+                        <span className="text-left font-semibold text-slate-900 hover:text-blue-600 transition-colors line-clamp-1">
+                          {record.location}
+                        </span>
+                        {isActive && (
+                          <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5 mt-0.5">
+                            <MapPin className="w-2.5 h-2.5 shrink-0" />
+                            Epicenter identified on map
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 font-mono font-bold text-slate-800 text-center">
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${
+                          record.magnitude >= 5.0
+                            ? 'bg-rose-100 text-rose-700 font-extrabold'
+                            : record.magnitude >= 4.0
+                            ? 'bg-amber-100 text-amber-800 font-bold'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {record.magnitude.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="font-semibold text-slate-700 whitespace-nowrap">
+                        {record.aor}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                      {getStatusBadge(record.status)}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => handleInspect(e, record)}
+                        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100/70 rounded-md transition-colors inline-flex items-center justify-center"
+                        title="Open Full Event Bulletin Modal"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

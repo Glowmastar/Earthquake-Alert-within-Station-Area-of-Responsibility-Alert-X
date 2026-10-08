@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import https from 'https';
 import zlib from 'zlib';
 import path from 'path';
@@ -8,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const DEFAULT_PORT = 3000;
+const ENV_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
 
 app.use(express.json());
 
@@ -340,10 +342,6 @@ function fetchPhivolcsEarthquakes(forceRefresh: boolean = false): Promise<any[]>
 }
 
 // API Routes
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok' });
-});
-
 app.get('/api/time', (_req: Request, res: Response) => {
   const now = new Date();
   res.json({
@@ -475,20 +473,28 @@ async function startServer() {
   if (isDev) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true, port: PORT, host: '0.0.0.0' },
+      server: { middlewareMode: true, hmr: process.env.DISABLE_HMR !== 'true' },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('/{*path}', (_req: Request, res: Response) => {
+    app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+  // Always listen on port 3000 (required for AI Studio environment)
+  app.listen(DEFAULT_PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${DEFAULT_PORT} (http://0.0.0.0:${DEFAULT_PORT})`);
   });
+
+  // If environment specifies another port (e.g., 8080 on Cloud Run), listen on that too
+  if (ENV_PORT && ENV_PORT !== DEFAULT_PORT) {
+    app.listen(ENV_PORT, '0.0.0.0', () => {
+      console.log(`Server also listening on port ${ENV_PORT} (http://0.0.0.0:${ENV_PORT})`);
+    });
+  }
 }
 
 startServer();
