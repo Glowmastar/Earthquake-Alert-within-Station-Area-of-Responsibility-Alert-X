@@ -65,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isAllRecordsActive = isRecordsView && (currentFilter === 'ALL' || !currentFilter);
   const isInsideAorActive = isRecordsView && currentFilter === 'INSIDE_AOR';
   const isAdmin = currentUser?.role === 'Administrator';
+  const isUserRole = currentUser?.role === 'User';
 
   return (
     <>
@@ -78,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0a1628] text-slate-300 flex flex-col justify-between shrink-0 select-none overflow-y-auto border-r border-slate-800/80 transition-all duration-300 ease-in-out lg:static ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 h-screen bg-[#0a1628] text-slate-300 flex flex-col shrink-0 select-none overflow-hidden border-r border-slate-800/80 transition-all duration-300 ease-in-out lg:static ${
           isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         } ${
           isHidden
@@ -86,8 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : 'lg:ml-0 lg:opacity-100 lg:translate-x-0'
         }`}
       >
-        {/* Top Brand Section */}
-        <div className="p-5 pb-3">
+        {/* Top Brand Section & Scrollable Navigation Tabs */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 pb-3">
           {/* Brand Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -123,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onCloseMobile}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 lg:hidden transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 lg:hidden transition-colors cursor-pointer"
                 title="Close sidebar"
                 aria-label="Close sidebar"
               >
@@ -134,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={onToggleHide}
-                  className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
+                  className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
                   title="Hide sidebar (Ctrl+B)"
                   aria-label="Hide sidebar"
                 >
@@ -206,7 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setRecordsExpanded(!recordsExpanded);
                 }}
-                className="p-1 hover:bg-white/10 rounded transition-colors"
+                className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                 title={recordsExpanded ? "Collapse section" : "Expand section"}
                 aria-label={recordsExpanded ? "Collapse section" : "Expand section"}
               >
@@ -305,7 +306,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setMapExpanded(!mapExpanded);
                 }}
-                className="p-1 hover:bg-white/10 rounded transition-colors"
+                className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                 title={mapExpanded ? "Collapse section" : "Expand section"}
                 aria-label={mapExpanded ? "Collapse section" : "Expand section"}
               >
@@ -365,103 +366,105 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* Exception Review Dropdown */}
-          <div>
-            <div
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
-                currentView === 'exceptions'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  handleNavigate('exceptions', 'ALL');
-                  setExceptionExpanded(true);
-                }}
-                className="flex items-center gap-3 flex-1 text-left focus:outline-none"
-                title="Go to Exception Review"
+          {/* Exception Review Dropdown (Hidden if account is User) */}
+          {!isUserRole && (
+            <div>
+              <div
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
+                  currentView === 'exceptions'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                }`}
               >
-                <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
-                <span>Exception Review</span>
-              </button>
-              <div className="flex items-center gap-1.5">
-                {reviewCount > 0 && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                      currentView === 'exceptions' ? 'bg-white text-blue-600' : 'bg-red-500/80 text-white'
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleNavigate('exceptions', 'ALL');
+                    setExceptionExpanded(true);
+                  }}
+                  className="flex items-center gap-3 flex-1 text-left focus:outline-none"
+                  title="Go to Exception Review"
+                >
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
+                  <span>Exception Review</span>
+                </button>
+                <div className="flex items-center gap-1.5">
+                  {reviewCount > 0 && (
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                        currentView === 'exceptions' ? 'bg-white text-blue-600' : 'bg-red-500/80 text-white'
+                      }`}
+                    >
+                      {reviewCount}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExceptionExpanded(!exceptionExpanded);
+                    }}
+                    className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                    title={exceptionExpanded ? "Collapse section" : "Expand section"}
+                    aria-label={exceptionExpanded ? "Collapse section" : "Expand section"}
+                  >
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
+                        exceptionExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
+                  exceptionExpanded
+                    ? 'grid-rows-[1fr] opacity-100 mt-1'
+                    : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                }`}
+              >
+                <div className="overflow-hidden ml-2 pl-2 space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('exceptions', 'Offshore Event')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      currentView === 'exceptions' && currentFilter === 'Offshore Event'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                     }`}
                   >
-                    {reviewCount}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExceptionExpanded(!exceptionExpanded);
-                  }}
-                  className="p-1 hover:bg-white/10 rounded transition-colors"
-                  title={exceptionExpanded ? "Collapse section" : "Expand section"}
-                  aria-label={exceptionExpanded ? "Collapse section" : "Expand section"}
-                >
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform duration-300 ease-in-out ${
-                      exceptionExpanded ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <div
-              className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
-                exceptionExpanded
-                  ? 'grid-rows-[1fr] opacity-100 mt-1'
-                  : 'grid-rows-[0fr] opacity-0 pointer-events-none'
-              }`}
-            >
-              <div className="overflow-hidden ml-2 pl-2 space-y-1">
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('exceptions', 'Offshore Event')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'exceptions' && currentFilter === 'Offshore Event'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
-                      currentView === 'exceptions' && currentFilter === 'Offshore Event'
-                        ? 'bg-white'
-                        : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>Offshore Events</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('exceptions', 'Boundary Event')}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    currentView === 'exceptions' && currentFilter === 'Boundary Event'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'exceptions' && currentFilter === 'Offshore Event'
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>Offshore Events</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('exceptions', 'Boundary Event')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                       currentView === 'exceptions' && currentFilter === 'Boundary Event'
-                        ? 'bg-white'
-                        : 'bg-slate-400'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                     }`}
-                  />
-                  <span>Boundary Events</span>
-                </button>
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        currentView === 'exceptions' && currentFilter === 'Boundary Event'
+                          ? 'bg-white'
+                          : 'bg-slate-400'
+                      }`}
+                    />
+                    <span>Boundary Events</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Email Dropdown (Matching Screenshot) */}
           <div>
@@ -490,7 +493,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setEmailExpanded(!emailExpanded);
                 }}
-                className="p-1 hover:bg-white/10 rounded transition-colors"
+                className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                 title={emailExpanded ? "Collapse section" : "Expand section"}
                 aria-label={emailExpanded ? "Collapse section" : "Expand section"}
               >
@@ -601,7 +604,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setIntensityExpanded(!intensityExpanded);
                 }}
-                className="p-1 hover:bg-white/10 rounded transition-colors"
+                className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                 title={intensityExpanded ? "Collapse section" : "Expand section"}
                 aria-label={intensityExpanded ? "Collapse section" : "Expand section"}
               >
@@ -690,12 +693,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Audit Log</span>
           </button>
 
+          {/* Settings Tab - Placed Outside Administration and Visible to Users */}
+          <button
+            type="button"
+            onClick={() => handleNavigate('settings', 'GENERAL')}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-all ${
+              currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            <span>Settings</span>
+          </button>
+
           {/* Administration Dropdown (Admin Only) */}
           {isAdmin && (
             <div>
               <div
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg font-medium transition-all ${
-                  currentView === 'settings' || currentView === 'roles'
+                  (currentView === 'settings' && currentFilter !== 'GENERAL') || currentView === 'roles'
                     ? 'text-white'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
                 }`}
@@ -703,13 +720,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    handleNavigate('settings', 'GENERAL');
+                    handleNavigate('settings', 'EQINFO_SOURCE');
                     setAdminExpanded(true);
                   }}
                   className="flex items-center gap-3 flex-1 text-left focus:outline-none cursor-pointer"
-                  title="Go to Administration Settings"
+                  title="Go to Administration"
                 >
-                  <SettingsIcon className="w-4 h-4 shrink-0" />
+                  <Shield className="w-4 h-4 shrink-0" />
                   <span>Administration</span>
                 </button>
                 <button
@@ -718,7 +735,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     e.stopPropagation();
                     setAdminExpanded(!adminExpanded);
                   }}
-                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                   title={adminExpanded ? "Collapse section" : "Expand section"}
                   aria-label={adminExpanded ? "Collapse section" : "Expand section"}
                 >
@@ -794,24 +811,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleNavigate('settings', 'GENERAL')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                      currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full inline-block ${
-                        currentView === 'settings' && (currentFilter === 'GENERAL' || !currentFilter)
-                          ? 'bg-white'
-                          : 'bg-slate-400'
-                      }`}
-                    />
-                    <span>Settings</span>
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => handleNavigate('settings', 'VERSION_HISTORY')}
                     className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                       currentView === 'settings' && currentFilter === 'VERSION_HISTORY'
@@ -835,79 +834,87 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Desktop Quick Collapse Button */}
-      {onToggleHide && (
-        <div className="hidden lg:block px-3 mb-2">
-          <button
-            type="button"
-            onClick={onToggleHide}
-            className="w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 transition-all group"
-            title="Hide sidebar (Ctrl+B)"
-          >
-            <div className="flex items-center gap-2">
-              <PanelLeftClose className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
-              <span>Hide Sidebar</span>
-            </div>
-            <kbd className="text-[10px] font-mono text-slate-400 bg-slate-950/70 px-1.5 py-0.5 rounded border border-slate-700/60">
-              Ctrl+B
-            </kbd>
-          </button>
-        </div>
-      )}
-
-      {/* Logout Button on Lower Left under Hide Sidebar */}
-      {onLogout && (
-        <div className="px-3 mb-2">
-          <button
-            type="button"
-            onClick={onLogout}
-            className="w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs font-semibold text-rose-400 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 hover:border-rose-700/70 transition-all group cursor-pointer shadow-2xs"
-            title="Log out of system"
-          >
-            <div className="flex items-center gap-2">
-              <LogOut className="w-4 h-4 text-rose-400 group-hover:text-rose-200 transition-colors shrink-0" />
-              <span>Logout</span>
-            </div>
-            <span className="text-[10px] text-rose-400/80 group-hover:text-rose-200 font-medium">
-              Sign out
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* Bottom Organic Waves & Slogan Section */}
-      <div className="relative pt-10 pb-5 px-3 text-center mt-auto">
-        {/* Layered Decorative Wave SVG Background */}
-        <div className="absolute inset-x-0 bottom-0 pointer-events-none opacity-60">
-          <svg viewBox="0 0 250 120" className="w-full h-auto" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="wave1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0284c7" stopOpacity="0.8" />
-                <stop offset="0%" stopColor="#0369a1" stopOpacity="0.4" />
-              </linearGradient>
-              <linearGradient id="wave2" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0.9" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,50 C50,20 90,80 140,40 C190,10 210,60 250,30 L250,120 L0,120 Z"
-              fill="url(#wave2)"
-            />
-            <path
-              d="M0,75 C60,50 110,95 160,70 C210,45 230,85 250,65 L250,120 L0,120 Z"
-              fill="url(#wave1)"
-            />
-          </svg>
-        </div>
-
-        {/* Slogan */}
-        <div className="relative z-10 space-y-1">
-          <div className="text-[10px] font-bold tracking-wider text-cyan-400 uppercase">
-            MONITOR • ALERT • PREPARE
+      {/* Pinned Non-Scrolling Sidebar Footer Section */}
+      <div className="shrink-0 bg-[#0a1628] border-t border-slate-800/80 pt-2 z-10 flex flex-col">
+        {/* Desktop Quick Collapse Button */}
+        {onToggleHide && (
+          <div className="hidden lg:block px-3 mb-2">
+            <button
+              type="button"
+              onClick={onToggleHide}
+              className="w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 transition-all group cursor-pointer"
+              title="Hide sidebar (Ctrl+B)"
+            >
+              <div className="flex items-center gap-2">
+                <PanelLeftClose className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                <span>Hide Sidebar</span>
+              </div>
+              <kbd className="text-[10px] font-mono text-slate-400 bg-slate-950/70 px-1.5 py-0.5 rounded border border-slate-700/60">
+                Ctrl+B
+              </kbd>
+            </button>
           </div>
-          <div className="text-[10px] font-bold text-cyan-300 tracking-wider">
-            FOR A SAFER TOMORROW
+        )}
+
+        {/* Logout Button on Lower Left under Hide Sidebar - Elevated above sidebar layer so it pops out */}
+        {onLogout && (
+          <div className="relative z-40 px-3 mb-3 -mt-0.5">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-xs font-bold text-rose-200 hover:text-white bg-[#1a0b12] hover:bg-[#260f1b] border-2 border-rose-500/60 hover:border-rose-400 shadow-xl shadow-black/70 hover:shadow-2xl hover:shadow-rose-950/60 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 group cursor-pointer ring-1 ring-white/10"
+              title="Log out of system"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-rose-500/30 border border-rose-400/50 flex items-center justify-center shrink-0 group-hover:bg-rose-600 group-hover:border-rose-300 shadow-xs transition-colors">
+                  <LogOut className="w-3.5 h-3.5 text-rose-200 group-hover:text-white transition-colors" />
+                </div>
+                <div className="text-left">
+                  <span className="block tracking-wide font-black text-rose-100">LOGOUT</span>
+                  <span className="block text-[9.5px] text-rose-300/80 font-normal">Terminate session</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-rose-200 group-hover:text-white bg-rose-950 group-hover:bg-rose-900 px-2 py-1 rounded-lg border border-rose-600/70 group-hover:border-rose-400 transition-colors shadow-xs">
+                Sign out &rarr;
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* Bottom Organic Waves & Slogan Section */}
+        <div className="relative pt-6 pb-4 px-3 text-center">
+          {/* Layered Decorative Wave SVG Background */}
+          <div className="absolute inset-x-0 bottom-0 pointer-events-none opacity-60">
+            <svg viewBox="0 0 250 120" className="w-full h-auto" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="wave1" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#0284c7" stopOpacity="0.8" />
+                  <stop offset="0%" stopColor="#0369a1" stopOpacity="0.4" />
+                </linearGradient>
+                <linearGradient id="wave2" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0.9" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M0,50 C50,20 90,80 140,40 C190,10 210,60 250,30 L250,120 L0,120 Z"
+                fill="url(#wave2)"
+              />
+              <path
+                d="M0,75 C60,50 110,95 160,70 C210,45 230,85 250,65 L250,120 L0,120 Z"
+                fill="url(#wave1)"
+              />
+            </svg>
+          </div>
+
+          {/* Slogan */}
+          <div className="relative z-10 space-y-0.5">
+            <div className="text-[9.5px] font-bold tracking-wider text-cyan-400 uppercase">
+              MONITOR • ALERT • PREPARE
+            </div>
+            <div className="text-[9.5px] font-bold text-cyan-300 tracking-wider">
+              FOR A SAFER TOMORROW
+            </div>
           </div>
         </div>
       </div>

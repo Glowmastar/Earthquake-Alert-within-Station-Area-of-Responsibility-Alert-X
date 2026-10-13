@@ -13,6 +13,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [externalHoverAor, setExternalHoverAor] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -249,14 +250,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         </div>
       </div>
 
-      {/* Dark Blue Philippine Map on Right Side with Looping Random AOR Highlight */}
-      <div className="absolute right-0 top-0 bottom-0 w-full lg:w-[56%] xl:w-[60%] flex items-center justify-center pointer-events-none lg:pointer-events-auto opacity-30 lg:opacity-100 z-10 transition-opacity duration-500 overflow-hidden">
-        <LoginPhilippineMap />
+      {/* Dark Blue Philippine Map on Right Side with Interactive Hover Inspection & 1-sec Random AOR Selection */}
+      <div className="absolute right-0 top-0 bottom-0 w-full md:w-[54%] lg:w-[58%] xl:w-[60%] flex items-center justify-center pointer-events-auto opacity-90 md:opacity-100 z-20 transition-opacity duration-500 overflow-hidden">
+        <LoginPhilippineMap
+          externalHoverCode={externalHoverAor}
+          onSelectStation={(code) => {
+            if (code === 'CGP') {
+              handleQuickSelectAccount('cagayan');
+            } else if (code === 'PCP') {
+              handleQuickSelectAccount('palayan');
+            } else {
+              showToast(`Inspecting Station AOR: ${code}`);
+            }
+          }}
+        />
       </div>
 
-      {/* Main Content Container */}
-      <div className="relative z-20 w-full max-w-7xl mx-auto flex items-center justify-between min-h-[90vh] px-4 sm:px-6 lg:px-12 py-6">
-        <div className="w-full max-w-md flex flex-col items-center mx-auto lg:mx-0 lg:ml-6 xl:ml-16 shrink-0">
+      {/* Main Content Container - pointer-events-none so mouse freely hovers over the Philippine map on the right */}
+      <div className="relative z-30 w-full max-w-7xl mx-auto flex items-center justify-between min-h-[90vh] px-4 sm:px-6 lg:px-12 py-6 pointer-events-none">
+        <div className="w-full max-w-md flex flex-col items-center mx-auto md:mx-0 md:ml-4 lg:ml-8 xl:ml-16 shrink-0 pointer-events-auto">
           {/* Top Logo & Slogan Header (matching screenshot) */}
           <div className="flex flex-col items-center mb-7 text-center">
             {/* Waveform Pulse Icon and ALERT X text in one line */}
@@ -311,10 +323,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => handleQuickSelectAccount('cagayan')}
-                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
+                onMouseEnter={() => setExternalHoverAor('CGP')}
+                onMouseLeave={() => setExternalHoverAor(null)}
+                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 cursor-pointer ${
                   email.includes('cagayanseismicstation')
                     ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-cyan-400'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
@@ -327,10 +341,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => handleQuickSelectAccount('palayan')}
-                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
+                onMouseEnter={() => setExternalHoverAor('PCP')}
+                onMouseLeave={() => setExternalHoverAor(null)}
+                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 cursor-pointer ${
                   email === 'palayanz@phivolcs.dost.gov.ph'
                     ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-blue-400'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
@@ -343,10 +359,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               <button
                 type="button"
                 onClick={() => handleQuickSelectAccount('admin')}
-                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
+                onMouseEnter={() => setExternalHoverAor(null)}
+                className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 cursor-pointer ${
                   email === 'j.delacruz@phivolcs.dost.gov.ph'
                     ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-emerald-400'
                 }`}
               >
                 <div className="flex items-center gap-1.5">

@@ -273,9 +273,14 @@ export default function App() {
   };
 
   const navigateTo = (view: string, filter?: string) => {
-    if ((view === 'settings' || view === 'roles') && currentUser?.role !== 'Administrator') {
+    if (view === 'exceptions' && currentUser?.role === 'User') {
       setCurrentView('dashboard');
-      showToast('Administration settings are restricted to administrator accounts.');
+      showToast('Exception Review is restricted to administrative and supervisory personnel.');
+      return;
+    }
+    if ((view === 'roles' || (view === 'settings' && filter && filter !== 'GENERAL')) && currentUser?.role !== 'Administrator') {
+      setCurrentView('dashboard');
+      showToast('This administration section is restricted to administrator accounts.');
       return;
     }
     setCurrentView(view);
@@ -616,21 +621,39 @@ export default function App() {
         />
 
         {/* Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-          {/* Station Restriction Notice Banner if logged in as a scoped station on Dashboard */}
-          {currentView === 'dashboard' && currentUser.assignedAor && currentUser.assignedAor !== 'ALL' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between text-xs text-blue-900 shadow-2xs">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
-                <span>
-                  <strong>Station View Active:</strong> You are logged in with the <strong>{currentUser.name}</strong> user account (<code>{currentUser.email}</code>). Only earthquake records, alerts, and recipients within the <strong>{currentUser.assignedAor} AOR</strong> are displayed.
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 relative">
+          {/* Distant Island Background Image (Atmospherically Blurred so data cards stay prominent) */}
+          <div
+            className="absolute inset-0 pointer-events-none z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <div
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-110"
+              style={{
+                backgroundImage: 'url(/assets/distant-island.svg)',
+                filter: 'blur(22px)',
+                opacity: 0.28,
+              }}
+            />
+            {/* Subtle atmospheric wash gradient to ensure high readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/10 via-transparent to-slate-900/20" />
+          </div>
+
+          <div className="relative z-10 space-y-4">
+            {/* Station Restriction Notice Banner if logged in as a scoped station on Dashboard */}
+            {currentView === 'dashboard' && currentUser.assignedAor && currentUser.assignedAor !== 'ALL' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between text-xs text-blue-900 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
+                  <span>
+                    <strong>Station View Active:</strong> You are logged in with the <strong>{currentUser.name}</strong> user account (<code>{currentUser.email}</code>). Only earthquake records, alerts, and recipients within the <strong>{currentUser.assignedAor} AOR</strong> are displayed.
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded border border-blue-300 shrink-0 ml-2">
+                  {currentUser.assignedAor} AOR Only
                 </span>
               </div>
-              <span className="text-[11px] font-mono font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded border border-blue-300 shrink-0 ml-2">
-                {currentUser.assignedAor} AOR Only
-              </span>
-            </div>
-          )}
+            )}
 
           {currentView === 'dashboard' && (
             <>
@@ -745,7 +768,7 @@ export default function App() {
             )
           )}
 
-          {currentView === 'exceptions' && (
+          {currentView === 'exceptions' && currentUser?.role !== 'User' && (
             <ExceptionReviewView
               records={scopedEarthquakes}
               initialFilter={exceptionFilter}
@@ -769,6 +792,7 @@ export default function App() {
               <TestEmailView
                 currentUser={currentUser}
                 earthquakes={scopedEarthquakes}
+                recipients={scopedRecipients}
                 onNavigateToAudit={() => navigateTo('audit')}
               />
             ) : (
@@ -799,6 +823,7 @@ export default function App() {
           {currentView === 'social-media' && (
             <SocialMediaView
               currentUser={currentUser}
+              earthquakes={scopedEarthquakes}
               onNavigateToFieldReports={() => setCurrentView('intensity-field')}
               onNavigateToConsolidator={() => setCurrentView('intensity')}
             />
@@ -822,30 +847,39 @@ export default function App() {
             />
           )}
 
-          {currentView === 'settings' && currentUser?.role === 'Administrator' && (
+          {currentView === 'settings' && (
             settingsSubView === 'GENERAL' ? (
               <AdministrationSettingsView
                 currentUser={currentUser}
                 onShowToast={showToast}
                 onNavigateToAudit={() => navigateTo('audit')}
               />
-            ) : settingsSubView === 'ROLES' ? (
-              <RolesView onNavigateToAudit={() => navigateTo('audit')} />
-            ) : settingsSubView === 'AOR_RULES' ? (
-              <AORRulesView currentUser={currentUser} />
-            ) : settingsSubView === 'VERSION_HISTORY' ? (
-              <VersionHistoryView
+            ) : currentUser?.role === 'Administrator' ? (
+              settingsSubView === 'ROLES' ? (
+                <RolesView onNavigateToAudit={() => navigateTo('audit')} />
+              ) : settingsSubView === 'AOR_RULES' ? (
+                <AORRulesView currentUser={currentUser} />
+              ) : settingsSubView === 'VERSION_HISTORY' ? (
+                <VersionHistoryView
+                  currentUser={currentUser}
+                  onNavigateToAudit={() => navigateTo('audit')}
+                />
+              ) : (
+                <SettingsView onSync={handleRefreshData} />
+              )
+            ) : (
+              <AdministrationSettingsView
                 currentUser={currentUser}
+                onShowToast={showToast}
                 onNavigateToAudit={() => navigateTo('audit')}
               />
-            ) : (
-              <SettingsView onSync={handleRefreshData} />
             )
           )}
 
           {currentView === 'roles' && currentUser?.role === 'Administrator' && (
             <RolesView onNavigateToAudit={() => navigateTo('audit')} />
           )}
+          </div>
         </main>
       </div>
 

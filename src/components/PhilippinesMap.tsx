@@ -915,6 +915,9 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
     if (!showEarthquakes) return;
 
+    // Identify the latest earthquake record (most recent event in the list)
+    const latestEarthquakeId = filteredEarthquakes.length > 0 ? filteredEarthquakes[0]?.id : null;
+
     filteredEarthquakes.forEach((eq) => {
       const isInside =
         isCgpScoped
@@ -923,10 +926,11 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
           ? eq.aor === 'PCP'
           : eq.aor === 'PCP' || eq.aor === 'BIP' || eq.aor === 'CGP';
       const isSelected = selectedEarthquake?.id === eq.id;
+      const isLatest = eq.id === latestEarthquakeId;
 
-      // Marker sizing based on magnitude
+      // Clean, simple epicenter point (no magnitude number inside)
       const mag = eq.magnitude || 2.0;
-      const sizePx = Math.max(16, Math.min(42, Math.round(mag * 5.5)));
+      const sizePx = Math.max(12, Math.min(22, Math.round(mag * 3.2)));
 
       // Colors
       let color = '#38bdf8'; // Outside AOR (cyan/sky)
@@ -940,22 +944,25 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
         labelBg = 'bg-amber-600';
       }
 
+      // ONLY the latest earthquake information epicenter pulses (or if user selected it)
+      const shouldPulse = isLatest || isSelected;
+
       const eqIcon = L.divIcon({
         className: 'custom-eq-icon',
         html: `
           <div class="relative flex items-center justify-center cursor-pointer ${
-            isSelected ? 'scale-125 z-50' : 'hover:scale-120'
+            isSelected ? 'scale-125 z-50' : 'hover:scale-125'
           } transition-transform">
             ${
-              eq.isRecent24h || isSelected
-                ? `<div class="absolute rounded-full animate-ping opacity-60" style="width: ${sizePx * 1.8}px; height: ${sizePx * 1.8}px; border: 2px solid ${color};"></div>`
+              shouldPulse
+                ? `<div class="absolute rounded-full animate-ping opacity-75" style="width: ${sizePx * 2.2}px; height: ${sizePx * 2.2}px; border: 2px solid ${color};"></div>`
                 : ''
             }
-            <div class="absolute rounded-full opacity-40 blur-xs" style="width: ${sizePx * 1.3}px; height: ${sizePx * 1.3}px; background-color: ${color};"></div>
-            <div class="relative rounded-full flex items-center justify-center shadow-[0_0_15px_${color}] border-2 ${
-              isSelected ? 'border-amber-300 ring-4 ring-rose-400' : 'border-white/95 ring-1 ring-slate-900/60'
-            } text-white font-black text-[10px]" style="width: ${sizePx}px; height: ${sizePx}px; background-color: ${color}">
-              ${mag.toFixed(1)}
+            <div class="absolute rounded-full opacity-35 blur-xs" style="width: ${sizePx * 1.4}px; height: ${sizePx * 1.4}px; background-color: ${color};"></div>
+            <div class="relative rounded-full shadow-[0_0_12px_${color}] border-2 ${
+              isSelected ? 'border-amber-300 ring-4 ring-rose-400' : 'border-white ring-1 ring-slate-900/70'
+            } flex items-center justify-center" style="width: ${sizePx}px; height: ${sizePx}px; background-color: ${color}">
+              <div class="w-1.5 h-1.5 rounded-full bg-white opacity-95"></div>
             </div>
           </div>
         `,

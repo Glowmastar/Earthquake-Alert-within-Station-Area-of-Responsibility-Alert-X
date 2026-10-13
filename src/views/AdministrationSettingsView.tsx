@@ -9,6 +9,7 @@ import {
   Smartphone,
   Check,
   RotateCcw,
+  RotateCw,
   Activity,
   Layers,
   FileText,
@@ -89,6 +90,11 @@ export const AdministrationSettingsView: React.FC<AdministrationSettingsViewProp
   const [rateLimitPerStation, setRateLimitPerStation] = useState('10 per hour');
   const [emailBrandingHeader, setEmailBrandingHeader] = useState('PHIVOLCS Earthquake Information');
   const [includeIntensityMapAttachment, setIncludeIntensityMapAttachment] = useState(true);
+  const [smtpHost, setSmtpHost] = useState('smtp.gmail.com');
+  const [smtpPort, setSmtpPort] = useState('465');
+  const [smtpUser, setSmtpUser] = useState(currentUser?.email || 'ebardo.glynbryan1@gmail.com');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [testingSmtp, setTestingSmtp] = useState(false);
 
   // --- Form State: Data & Retention Settings ---
   const [bulletinArchiveDays, setBulletinArchiveDays] = useState('365 days');
@@ -121,6 +127,17 @@ export const AdministrationSettingsView: React.FC<AdministrationSettingsViewProp
         // fallback
       }
     }
+
+    const savedSmtp = localStorage.getItem('alertx_smtp_config');
+    if (savedSmtp) {
+      try {
+        const parsed = JSON.parse(savedSmtp);
+        if (parsed.host) setSmtpHost(parsed.host);
+        if (parsed.port) setSmtpPort(parsed.port);
+        if (parsed.user) setSmtpUser(parsed.user);
+        if (parsed.pass) setSmtpPass(parsed.pass);
+      } catch {}
+    }
   }, []);
 
   const currentStationCode = activeStation.split('—')[0].trim() || defaultStationCode;
@@ -147,6 +164,17 @@ export const AdministrationSettingsView: React.FC<AdministrationSettingsViewProp
     };
 
     localStorage.setItem('alertx_admin_settings', JSON.stringify(settingsPayload));
+
+    // Save SMTP credentials
+    const smtpPayload = {
+      preset: smtpHost.includes('gmail.com') ? 'gmail' : smtpHost.includes('office365') ? 'outlook' : 'custom',
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === '465',
+      user: smtpUser,
+      pass: smtpPass,
+    };
+    localStorage.setItem('alertx_smtp_config', JSON.stringify(smtpPayload));
     setHasUnsavedChanges(false);
     setSaveSuccessNotice(true);
 
@@ -867,6 +895,124 @@ export const AdministrationSettingsView: React.FC<AdministrationSettingsViewProp
                     />
                   </button>
                 </div>
+              </div>
+
+              {/* Outbound SMTP Server Configuration */}
+              <div className="pt-4 border-t border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Outbound Delivery Server (SMTP)
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Configure the mail server used to dispatch actual emails to recipients.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={testingSmtp}
+                    onClick={async () => {
+                      setTestingSmtp(true);
+                      try {
+                        const res = await fetch('/api/test-email-connection', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            host: smtpHost,
+                            port: smtpPort,
+                            secure: smtpPort === '465',
+                            user: smtpUser,
+                            pass: smtpPass,
+                          }),
+                        });
+                        const data = await res.json();
+                        setTestingSmtp(false);
+                        if (data.success) {
+                          onShowToast?.(`SMTP verified (${data.latencyMs}ms): ${data.message}`);
+                        } else {
+                          onShowToast?.(`SMTP test failed: ${data.error}`);
+                        }
+                      } catch (err: any) {
+                        setTestingSmtp(false);
+                        onShowToast?.(`Network error: ${err.message}`);
+                      }
+                    }}
+                    className="border border-blue-600 text-blue-600 hover:bg-blue-50 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <RotateCw className={`w-3 h-3 ${testingSmtp ? 'animate-spin' : ''}`} />
+                    <span>Test SMTP Connection</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      SMTP HOST
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpHost}
+                      onChange={(e) => {
+                        setSmtpHost(e.target.value);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="smtp.gmail.com"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      PORT
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpPort}
+                      onChange={(e) => {
+                        setSmtpPort(e.target.value);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="465"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      USERNAME / SENDER EMAIL
+                    </label>
+                    <input
+                      type="email"
+                      value={smtpUser}
+                      onChange={(e) => {
+                        setSmtpUser(e.target.value);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="alerts@your-domain.gov.ph"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      PASSWORD / GOOGLE APP PASSWORD
+                    </label>
+                    <input
+                      type="password"
+                      value={smtpPass}
+                      onChange={(e) => {
+                        setSmtpPass(e.target.value);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="••••••••••••"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-500 italic">
+                  Tip: For Gmail delivery, generate a 16-character App Password at <code>myaccount.google.com/apppasswords</code> to enable direct inbox delivery.
+                </p>
               </div>
             </div>
           )}

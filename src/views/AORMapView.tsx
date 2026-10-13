@@ -492,15 +492,15 @@ export const AORMapView: React.FC<AORMapViewProps> = ({
 
       stationEqs.slice(0, 15).forEach((eq) => {
         const mag = eq.magnitude || 3.0;
-        const size = Math.max(16, Math.min(30, Math.round(mag * 4.5)));
+        const size = Math.max(12, Math.min(22, Math.round(mag * 3.2)));
         const color = mag >= 5.0 ? '#ef4444' : mag >= 4.0 ? '#f59e0b' : '#3b82f6';
 
         const eqIcon = L.divIcon({
           className: 'custom-eq-icon',
           html: `
             <div class="relative flex items-center justify-center cursor-pointer hover:scale-125 transition-transform">
-              <div class="w-${size} h-${size} rounded-full flex items-center justify-center shadow-lg border-2 border-white text-white font-bold text-[9px]" style="width: ${size}px; height: ${size}px; background-color: ${color}">
-                ${mag.toFixed(1)}
+              <div class="rounded-full flex items-center justify-center shadow-lg border-2 border-white" style="width: ${size}px; height: ${size}px; background-color: ${color}">
+                <div class="w-1.5 h-1.5 rounded-full bg-white opacity-95"></div>
               </div>
             </div>
           `,

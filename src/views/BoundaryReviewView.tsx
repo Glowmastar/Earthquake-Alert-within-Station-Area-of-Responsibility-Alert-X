@@ -481,14 +481,14 @@ export const BoundaryReviewView: React.FC<BoundaryReviewViewProps> = ({
       className: 'custom-review-icon',
       html: `
         <div class="relative flex items-center justify-center">
-          <div class="absolute w-12 h-12 rounded-full bg-rose-500/30 animate-ping"></div>
-          <div class="w-6 h-6 rounded-full bg-rose-600 border-2 border-white shadow-xl flex items-center justify-center text-white font-black text-[9px]">
-            ${selectedItem.magnitude ? `M${selectedItem.magnitude.toFixed(1)}` : 'EQ'}
+          <div class="absolute w-10 h-10 rounded-full bg-rose-500/30 animate-ping"></div>
+          <div class="w-5 h-5 rounded-full bg-rose-600 border-2 border-white shadow-xl flex items-center justify-center">
+            <div class="w-1.5 h-1.5 rounded-full bg-white"></div>
           </div>
         </div>
       `,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
     });
 
     const eventMarker = L.marker([selectedItem.lat, selectedItem.lng], { icon: eventIcon });

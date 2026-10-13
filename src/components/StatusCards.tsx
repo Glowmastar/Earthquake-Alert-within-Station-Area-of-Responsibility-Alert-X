@@ -86,8 +86,8 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* 1. EQInfo Source */}
-      <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5">
+        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
           <Database className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -107,8 +107,8 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
       </div>
 
       {/* 2. Alert Service */}
-      <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5">
+        <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
           <Settings className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -128,8 +128,8 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
       </div>
 
       {/* 3. GIS Dataset */}
-      <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5">
+        <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
           <Layers className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -148,9 +148,9 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
         </div>
       </div>
 
-      {/* 4. Last Update (Synchronized with website & bulletin updates) */}
-      <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-xs flex items-center gap-3.5 relative group">
-        <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-500 flex items-center justify-center shrink-0 border border-sky-100">
+      {/* 4. Last Update */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5 relative group">
+        <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
           <Clock className={`w-5 h-5 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
         </div>
         <div className="min-w-0 flex-1">
@@ -163,19 +163,19 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
                 type="button"
                 onClick={onRefresh}
                 disabled={isRefreshing}
-                className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors"
+                className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition-colors cursor-pointer"
                 title="Sync now"
               >
                 <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
               </button>
             )}
           </div>
-          <div className="text-xs sm:text-sm font-bold text-blue-600 truncate mt-1 leading-tight" title={formattedTimeText}>
+          <div className="text-xs sm:text-sm font-bold text-slate-900 truncate mt-1 leading-tight font-mono" title={formattedTimeText}>
             {formattedTimeText || 'Synchronizing...'}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-ping" />
-            <span className="text-[11px] text-slate-500 font-medium">
+            <span className="text-[11px] text-slate-600 font-medium">
               {relativeText}
             </span>
             <span className="text-[10px] text-slate-400 hidden sm:inline">

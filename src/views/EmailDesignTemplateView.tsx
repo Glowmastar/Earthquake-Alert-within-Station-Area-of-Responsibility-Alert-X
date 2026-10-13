@@ -767,14 +767,49 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
     showToast(`Inserted ${tag} into template.`);
   };
 
-  // Send simulated test email
-  const handleSendTestEmail = () => {
+  // Send actual test email
+  const handleSendTestEmail = async () => {
+    if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
+      showToast('Please enter a valid recipient email address.');
+      return;
+    }
     setTestSending(true);
-    setTimeout(() => {
+    try {
+      let savedSmtpConfig;
+      try {
+        const stored = localStorage.getItem('alertx_smtp_config');
+        if (stored) savedSmtpConfig = JSON.parse(stored);
+      } catch {}
+
+      const res = await fetch('/api/send-test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: testEmailRecipient.trim(),
+          subject: substituteVariables(activeDraft.subjectTemplate),
+          html: generatedHtmlCode,
+          template: activeDraft.name,
+          smtpConfig: savedSmtpConfig?.user && savedSmtpConfig?.pass ? savedSmtpConfig : undefined,
+        }),
+      });
+
+      const data = await res.json();
       setTestSending(false);
       setIsTestEmailModalOpen(false);
-      showToast(`Test bulletin dispatched to ${testEmailRecipient}`);
-    }, 1100);
+
+      if (data.success) {
+        if (!data.isSandbox) {
+          showToast(`Real test email successfully sent to ${testEmailRecipient}! Check mailbox.`);
+        } else {
+          showToast(`Test bulletin dispatched via sandbox relay to ${testEmailRecipient}!`);
+        }
+      } else {
+        showToast(`Failed to send test email: ${data.error || 'Check server connection'}`);
+      }
+    } catch (err: any) {
+      setTestSending(false);
+      showToast(`Network error sending test email: ${err.message}`);
+    }
   };
 
   // Production HTML generator with inline styles for email client compatibility

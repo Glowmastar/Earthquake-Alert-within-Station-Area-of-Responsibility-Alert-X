@@ -50,25 +50,25 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
     switch (status) {
       case 'Alert Sent':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 shadow-2xs">
             Alert Sent
           </span>
         );
       case 'For Review':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 shadow-2xs">
             For Review
           </span>
         );
       case 'No Alert':
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 shadow-2xs">
             No Alert
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
             {status}
           </span>
         );
@@ -78,12 +78,12 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
   return (
     <div className="space-y-4">
       {/* Table Card */}
-      <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-100 bg-slate-50/40">
+        <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
           <div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Radio className="w-4 h-4 text-blue-600 animate-pulse" />
+              <Radio className="w-4 h-4 text-rose-600 animate-pulse" />
               Recent AOR Alerts
             </h3>
             <p className="text-[11px] text-slate-500">
@@ -93,7 +93,7 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
           <button
             type="button"
             onClick={onViewAllRecords}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors shrink-0"
+            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors shrink-0 cursor-pointer"
           >
             View All
           </button>
@@ -103,7 +103,7 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-bold text-blue-900">
+              <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold text-slate-600">
                 <th className="py-2.5 px-4 whitespace-nowrap">Time (PST)</th>
                 <th className="py-2.5 px-4 whitespace-nowrap">Event ID</th>
                 <th className="py-2.5 px-4">Location</th>
@@ -122,12 +122,12 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
                     onClick={() => handleRowClick(record)}
                     className={`cursor-pointer transition-colors ${
                       isActive
-                        ? 'bg-blue-50/80 hover:bg-blue-100/70 border-l-4 border-l-blue-600'
-                        : 'hover:bg-blue-50/40'
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-blue-600'
+                        : 'hover:bg-slate-50/70'
                     }`}
                     title="Click to identify and focus epicenter on map"
                   >
-                    <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap text-[11px]">
+                    <td className="py-3 px-4 font-mono text-slate-500 whitespace-nowrap text-[11px]">
                       {record.timePHT}
                     </td>
                     <td className="py-3 px-4 font-mono text-blue-600 font-semibold whitespace-nowrap text-[11px]">
@@ -151,14 +151,14 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
                         )}
                       </div>
                     </td>
-                    <td className="py-3 px-3 font-mono font-bold text-slate-800 text-center">
+                    <td className="py-3 px-3 font-mono font-bold text-center">
                       <span
                         className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${
                           record.magnitude >= 5.0
-                            ? 'bg-rose-100 text-rose-700 font-extrabold'
+                            ? 'bg-rose-100 text-rose-800 font-extrabold'
                             : record.magnitude >= 4.0
                             ? 'bg-amber-100 text-amber-800 font-bold'
-                            : 'bg-slate-100 text-slate-700'
+                            : 'bg-blue-100 text-blue-800'
                         }`}
                       >
                         {record.magnitude.toFixed(1)}
@@ -176,7 +176,7 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleInspect(e, record)}
-                        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100/70 rounded-md transition-colors inline-flex items-center justify-center"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors inline-flex items-center justify-center cursor-pointer"
                         title="Open Full Event Bulletin Modal"
                       >
                         <Eye className="w-4 h-4" />

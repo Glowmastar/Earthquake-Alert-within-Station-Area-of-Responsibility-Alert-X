@@ -4,6 +4,7 @@ import https from 'https';
 import zlib from 'zlib';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -461,6 +462,381 @@ app.post('/api/send-test-alert', async (req: Request, res: Response) => {
     message: `Test email alert successfully dispatched to ${to}`,
     alert: alertData,
   });
+});
+
+// HTTPS Email API (Resend / Port 443) & SMTP Connection Testing API
+app.post('/api/test-email-connection', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  try {
+    const { provider = 'resend', apiKey, resendApiKey, host, port, secure, user, pass } = req.body || {};
+    const effectiveResendKey = (resendApiKey || apiKey || process.env.RESEND_API_KEY || '').trim();
+
+    // 1. Resend HTTPS API (Port 443) - Preferred for Cloud / Port 443 environments
+    if (provider === 'resend' || effectiveResendKey || (!host && provider !== 'smtp')) {
+      if (effectiveResendKey) {
+        // Validate actual API key against Resend REST API on port 443
+        const resendRes = await fetch('https://api.resend.com/api-keys', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${effectiveResendKey}`,
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+
+        const latencyMs = Date.now() - startTime;
+        if (resendRes.ok) {
+          return res.json({
+            success: true,
+            latencyMs,
+            provider: 'Resend HTTPS API (Port 443)',
+            protocol: 'HTTPS / TLS 1.3 (Port 443)',
+            endpoint: 'https://api.resend.com/emails',
+            message: `Connected to Resend HTTPS Email API on port 443 (${latencyMs}ms latency). API key authenticated successfully.`,
+          });
+        } else {
+          const errData: any = await resendRes.json().catch(() => ({}));
+          return res.status(resendRes.status).json({
+            success: false,
+            latencyMs,
+            error: errData.message || `Resend authentication failed with status ${resendRes.status}`,
+            code: 'RESEND_AUTH_FAILED',
+          });
+        }
+      } else {
+        // Test HTTPS Port 443 network connectivity to api.resend.com
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(8000),
+        });
+        const latencyMs = Date.now() - startTime;
+
+        // HTTP 401 proves port 443 is wide open, TLS handshake completed, and endpoint is responding
+        return res.json({
+          success: true,
+          latencyMs,
+          provider: 'Resend HTTPS API (Port 443)',
+          protocol: 'HTTPS / Port 443',
+          requiresApiKey: true,
+          message: `Outbound HTTPS port 443 connection to api.resend.com verified (${latencyMs}ms). Enter your Resend API Key (re_...) to dispatch live test emails.`,
+        });
+      }
+    }
+
+    // 2. Fallback: SMTP Transport
+    const smtpHost = host || process.env.SMTP_HOST;
+    const smtpPort = port
+      ? parseInt(port, 10)
+      : (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465);
+    const smtpSecure = secure !== undefined
+      ? Boolean(secure)
+      : (process.env.SMTP_SECURE === 'true' || smtpPort === 465);
+    const smtpUser = user || process.env.SMTP_USER;
+    const smtpPass = pass || process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+
+    let transporter: any;
+    let isSandbox = false;
+
+    if (smtpHost && smtpUser && smtpPass) {
+      transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        connectionTimeout: 12000,
+        greetingTimeout: 12000,
+        socketTimeout: 15000,
+      });
+      await transporter.verify();
+    } else {
+      const testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      await transporter.verify();
+      isSandbox = true;
+    }
+
+    const latencyMs = Date.now() - startTime;
+    return res.json({
+      success: true,
+      latencyMs,
+      provider: isSandbox ? 'Ethereal Relay (Sandbox)' : (smtpHost || 'SMTP Server'),
+      user: isSandbox ? 'Test Sandbox Relay' : smtpUser,
+      isSandbox,
+      message: isSandbox
+        ? 'Email transmission service verified via test relay. Provide SMTP or Gmail App Password for direct mailbox delivery.'
+        : `SMTP connection established successfully with ${smtpHost} (${latencyMs}ms latency).`,
+    });
+  } catch (error: any) {
+    const latencyMs = Date.now() - startTime;
+    return res.status(500).json({
+      success: false,
+      latencyMs,
+      error: error?.message || 'Failed to establish connection',
+      code: error?.code,
+    });
+  }
+});
+
+// Actual Test Email Dispatch API (Resend HTTPS API / Port 443 + SMTP Fallback)
+app.post('/api/send-test-email', async (req: Request, res: Response) => {
+  try {
+    const {
+      to,
+      subject,
+      template,
+      language = 'English',
+      senderDisplayName = 'Alert X Test',
+      senderAddress,
+      sampleEvent,
+      html,
+      text,
+      provider = 'resend',
+      resendApiKey,
+      apiKey,
+      smtpConfig,
+    } = req.body || {};
+
+    if (!to || typeof to !== 'string' || !to.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        error: 'A valid recipient email address is required.',
+      });
+    }
+
+    const emailSubject = subject || `[TEST] Alert X Earthquake AOR Alert Notification - ${template || 'Standard Bulletin'}`;
+    const nowPst = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }) + ' PHT';
+
+    const defaultHtml = html || `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .header { background: #0f172a; color: #ffffff; padding: 20px 24px; }
+    .header-tag { font-size: 10px; font-weight: 800; color: #38bdf8; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+    .header-title { font-size: 16px; font-weight: 800; margin: 0; }
+    .banner { background: #fef3c7; border-bottom: 1px solid #fde68a; padding: 10px 24px; font-size: 12px; font-weight: 700; color: #92400e; }
+    .content { padding: 24px; font-size: 13px; line-height: 1.6; color: #334155; }
+    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .card-title { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .param-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+    .param-label { color: #64748b; font-weight: 600; }
+    .param-val { color: #0f172a; font-weight: 700; text-align: right; }
+    .footer { padding: 20px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-tag">DOST-PHIVOLCS &bull; ALERT X NOTIFICATION</div>
+      <div class="header-title">Seismic Event Telemetry Test Bulletin</div>
+    </div>
+    <div class="banner">
+      &#9888;&#65039; OFFICIAL TEST TRANSMISSION &bull; HTTPS API DELIVERY (PORT 443)
+    </div>
+    <div class="content">
+      <p style="margin-top: 0;">Hello,</p>
+      <p>This is a verified test notification dispatched via <strong>Alert X</strong> using an <strong>HTTPS Email API (Port 443)</strong> to confirm that seismic alert dispatches reach your inbox reliably.</p>
+      
+      <div class="card">
+        <div class="card-title">Test Event Telemetry Details</div>
+        <div class="param-row">
+          <span class="param-label">Target Recipient:</span>
+          <span class="param-val" style="color: #2563eb;">${to}</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Template Monitored:</span>
+          <span class="param-val">${template || 'Earthquake AOR Alert'}</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Language:</span>
+          <span class="param-val">${language}</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Sample Event Reference:</span>
+          <span class="param-val">${sampleEvent || 'EQ-TEST-001 (Northern Mindanao CGP)'}</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Delivery Channel:</span>
+          <span class="param-val" style="color: #059669;">HTTPS API (Port 443) &bull; Resend Engine</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Dispatch Timestamp:</span>
+          <span class="param-val">${nowPst}</span>
+        </div>
+      </div>
+
+      <p style="font-size: 11px; color: #64748b; margin-bottom: 0;">
+        <em>Notice: This message was dispatched solely for seismic communication system validation. No action is required by public disaster authorities.</em>
+      </p>
+    </div>
+    <div class="footer">
+      <strong>Alert X Operations Center</strong><br />
+      Philippine Institute of Volcanology and Seismology (PHIVOLCS)<br />
+      Department of Science and Technology (DOST)
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const defaultText = text || `
+[TEST] Alert X Earthquake AOR Alert Notification
+Target Recipient: ${to}
+Template: ${template || 'Earthquake AOR Alert'}
+Dispatched At: ${nowPst}
+Delivery Channel: HTTPS Email API (Port 443)
+
+This is a test email from Alert X verifying HTTPS API delivery (Port 443) to the intended recipient.
+    `.trim();
+
+    // 1. Send via Resend HTTPS API (Port 443)
+    const effectiveResendKey = (resendApiKey || apiKey || process.env.RESEND_API_KEY || '').trim();
+
+    if (provider === 'resend' || effectiveResendKey || (provider !== 'smtp' && !smtpConfig?.host)) {
+      if (!effectiveResendKey) {
+        return res.status(400).json({
+          success: false,
+          error: 'Resend API Key is required for HTTPS Port 443 delivery. Please enter your Resend API Key (re_...) in the API Settings modal or configure RESEND_API_KEY in your environment.',
+          code: 'MISSING_RESEND_KEY',
+        });
+      }
+
+      // In Resend, untrusted or unverified domains cannot be used as the sender.
+      // Resend provides "onboarding@resend.dev" by default for free testing.
+      let fromAddress = senderAddress;
+      if (!fromAddress || fromAddress.includes('@alertx.dost.gov.ph') || !fromAddress.includes('@')) {
+        fromAddress = `${senderDisplayName || 'Alert X'} <onboarding@resend.dev>`;
+      }
+
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${effectiveResendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [to.trim()],
+          subject: emailSubject,
+          html: defaultHtml,
+          text: defaultText,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      const resendData: any = await resendRes.json().catch(() => ({}));
+
+      if (!resendRes.ok) {
+        return res.status(resendRes.status || 500).json({
+          success: false,
+          error: resendData.message || resendData.error || `Failed to send email via Resend HTTPS API (${resendRes.status})`,
+          code: resendData.name || 'RESEND_API_ERROR',
+        });
+      }
+
+      return res.json({
+        success: true,
+        messageId: resendData.id,
+        accepted: [to],
+        provider: 'Resend HTTPS API (Port 443)',
+        protocol: 'HTTPS / TLS 1.3 (Port 443)',
+        message: `Actual test email successfully dispatched via Resend HTTPS API (Port 443) to ${to}. (Message ID: ${resendData.id})`,
+      });
+    }
+
+    // 2. Fallback: SMTP Transport
+    const smtpHost = smtpConfig?.host || process.env.SMTP_HOST;
+    const smtpPort = smtpConfig?.port
+      ? parseInt(smtpConfig.port, 10)
+      : (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465);
+    const smtpSecure = smtpConfig?.secure !== undefined
+      ? Boolean(smtpConfig.secure)
+      : (process.env.SMTP_SECURE === 'true' || smtpPort === 465);
+    const smtpUser = smtpConfig?.user || process.env.SMTP_USER;
+    const smtpPass = smtpConfig?.pass || smtpConfig?.password || process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+
+    let transporter: any;
+    let isSandbox = false;
+    let fromAddress = senderAddress || process.env.SMTP_FROM || `${senderDisplayName} <alerts@alertx.dost.gov.ph>`;
+
+    if (smtpHost && smtpUser && smtpPass) {
+      transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 25000,
+      });
+
+      if (smtpHost.includes('gmail.com')) {
+        fromAddress = `"${senderDisplayName}" <${smtpUser}>`;
+      }
+    } else {
+      const testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      isSandbox = true;
+      fromAddress = `"${senderDisplayName}" <${testAccount.user}>`;
+    }
+
+    const mailOptions = {
+      from: fromAddress,
+      to,
+      subject: emailSubject,
+      text: defaultText,
+      html: defaultHtml,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = isSandbox ? nodemailer.getTestMessageUrl(info) : null;
+
+    return res.json({
+      success: true,
+      messageId: info.messageId,
+      accepted: info.accepted,
+      response: info.response,
+      previewUrl,
+      isSandbox,
+      provider: isSandbox ? 'Ethereal Test Relay (Sandbox)' : (smtpHost || 'Configured SMTP'),
+      message: isSandbox
+        ? `Test email processed via test relay. Switch to Resend HTTPS API (Port 443) for direct mailbox delivery.`
+        : `Actual test email successfully dispatched and accepted by mail server for ${to}.`,
+    });
+  } catch (error: any) {
+    console.error('Error sending test email:', error);
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to dispatch test email',
+      code: error?.code,
+    });
+  }
 });
 
 // Serve public static assets (including official GIS / GeoJSON datasets)
