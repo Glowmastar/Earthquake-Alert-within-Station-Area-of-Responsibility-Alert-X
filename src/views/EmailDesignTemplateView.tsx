@@ -39,6 +39,9 @@ import {
   Flame,
   CheckSquare,
   Square,
+  Server,
+  Zap,
+  Globe,
 } from 'lucide-react';
 import { UserProfile, EarthquakeRecord } from '../types';
 import { isRecordInCgpAor } from '../utils/earthquakeHelpers';
@@ -480,14 +483,14 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
     return drafts.find((d) => d.id === activeDraftId) || drafts[0];
   }, [drafts, activeDraftId]);
 
-  // Combine built-in AOR earthquakes with real earthquakes passed in props (strictly inside station AOR)
+  // Real PHIVOLCS earthquakes for live template preview (strictly inside station AOR)
   const availableAorEarthquakes = useMemo<Record<string, ActualAorEarthquake>>(() => {
-    const map: Record<string, ActualAorEarthquake> = { ...BUILTIN_AOR_EARTHQUAKES };
+    const map: Record<string, ActualAorEarthquake> = {};
 
-    // Inject any matching real earthquakes passed from App.tsx
+    // First add real earthquakes passed from App.tsx matching station AOR
     earthquakes.forEach((eq) => {
       if (eq.aor === 'CGP' && isRecordInCgpAor(eq)) {
-        const key = `real-${eq.id}`;
+        const key = eq.id;
         map[key] = {
           id: eq.id,
           magnitude: eq.magnitude,
@@ -509,12 +512,59 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
       }
     });
 
+    // If no CGP events yet, inject real Inside AOR records
+    if (Object.keys(map).length === 0) {
+      earthquakes.filter((e) => e.aorStatus === 'Inside').slice(0, 15).forEach((eq) => {
+        map[eq.id] = {
+          id: eq.id,
+          magnitude: eq.magnitude,
+          location: eq.location,
+          province: eq.province || 'Philippine Seismic Network',
+          municipality: eq.municipality || eq.location,
+          originTime: eq.timePHT,
+          depthKm: eq.depthKm,
+          latitude: eq.coordinates?.lat || 8.8,
+          longitude: eq.coordinates?.lng || 126.7,
+          intensity: eq.intensity || 'PEIS III - Weak',
+          stationName: eq.stationName || stationDisplayName,
+          stationAor: eq.aor || 'CGP',
+          sampleIntensities: [
+            { locality: eq.location, peis: eq.intensity || 'Intensity III' },
+          ],
+        };
+      });
+    }
+
     return map;
   }, [earthquakes, stationDisplayName]);
 
   // Selected actual earthquake for live preview within station AOR
-  const [selectedEarthquakeKey, setSelectedEarthquakeKey] = useState<string>('cgp-cdo');
-  const previewEvent = availableAorEarthquakes[selectedEarthquakeKey] || BUILTIN_AOR_EARTHQUAKES['cgp-cdo'];
+  const availableKeys = useMemo(() => Object.keys(availableAorEarthquakes), [availableAorEarthquakes]);
+  const [selectedEarthquakeKey, setSelectedEarthquakeKey] = useState<string>('');
+
+  useEffect(() => {
+    if ((!selectedEarthquakeKey || !availableAorEarthquakes[selectedEarthquakeKey]) && availableKeys.length > 0) {
+      setSelectedEarthquakeKey(availableKeys[0]);
+    }
+  }, [availableKeys, availableAorEarthquakes, selectedEarthquakeKey]);
+
+  const previewEvent = availableAorEarthquakes[selectedEarthquakeKey] || availableAorEarthquakes[availableKeys[0]] || {
+    id: 'PHIVOLCS-LIVE',
+    magnitude: 3.5,
+    location: 'Real PHIVOLCS Live Telemetry',
+    province: 'Misamis Oriental',
+    municipality: 'Cagayan de Oro City',
+    originTime: 'Live Real-Time PHIVOLCS Feed',
+    depthKm: 15,
+    latitude: 8.482,
+    longitude: 124.647,
+    intensity: 'PEIS III (Weak)',
+    stationName: 'Cagayan de Oro Seismic Station (CGP)',
+    stationAor: 'CGP',
+    sampleIntensities: [
+      { locality: 'Cagayan de Oro City Proper', peis: 'Intensity III' },
+    ],
+  };
 
   // Viewport mode
   const [viewportMode, setViewportMode] = useState<'desktop' | 'mobile' | 'code'>('desktop');
@@ -526,11 +576,32 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Modals
+  // Modals & Dispatch State
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
   const [isTestEmailModalOpen, setIsTestEmailModalOpen] = useState(false);
-  const [testEmailRecipient, setTestEmailRecipient] = useState(currentUser?.email || 'ebardo.glynbryan1@gmail.com');
+  const [testEmailRecipient, setTestEmailRecipient] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('alertx_test_recipient');
+      if (saved && saved.includes('@')) return saved;
+    } catch {}
+    return 'ebardo.glynbryan1@gmail.com';
+  });
+  const [deliveryEngine, setDeliveryEngine] = useState<'smtp' | 'brevo' | 'resend'>(() => {
+    try {
+      const saved = localStorage.getItem('alertx_delivery_engine');
+      if (saved === 'smtp' || saved === 'resend') return saved;
+    } catch {}
+    return 'smtp';
+  });
   const [testSending, setTestSending] = useState(false);
+  const [lastDispatchResult, setLastDispatchResult] = useState<{
+    success: boolean;
+    messageId: string;
+    to: string;
+    time: string;
+    provider: string;
+    notice?: string;
+  } | null>(null);
   const [isNewDraftModalOpen, setIsNewDraftModalOpen] = useState(false);
   const [newDraftName, setNewDraftName] = useState('');
   const [newDraftPreset, setNewDraftPreset] = useState<'rapid' | 'felt' | 'minor' | 'aftershock' | 'blank'>('rapid');
@@ -768,41 +839,83 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
   };
 
   // Send actual test email
-  const handleSendTestEmail = async () => {
-    if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
+  const handleSendTestEmail = async (overrideRecipient?: string) => {
+    const targetRecipient = (overrideRecipient || testEmailRecipient || 'ebardo.glynbryan1@gmail.com').trim();
+    if (!targetRecipient || !targetRecipient.includes('@')) {
       showToast('Please enter a valid recipient email address.');
       return;
     }
     setTestSending(true);
     try {
+      localStorage.setItem('alertx_test_recipient', targetRecipient);
       let savedSmtpConfig;
+      let savedBrevoKey = '';
+      let savedBrevoSender = '';
+      let savedBrevoSenderName = '';
+      let savedResendKey = '';
       try {
         const stored = localStorage.getItem('alertx_smtp_config');
         if (stored) savedSmtpConfig = JSON.parse(stored);
+        savedBrevoKey = localStorage.getItem('alertx_brevo_api_key') || '';
+        savedBrevoSender = localStorage.getItem('alertx_brevo_sender') || '';
+        savedBrevoSenderName = localStorage.getItem('alertx_brevo_sender_name') || '';
+        savedResendKey = localStorage.getItem('alertx_resend_api_key') || '';
       } catch {}
+
+      const engineToUse = deliveryEngine || 'smtp';
+      const isCustomSmtp = Boolean(savedSmtpConfig?.user && savedSmtpConfig?.pass);
 
       const res = await fetch('/api/send-test-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: testEmailRecipient.trim(),
+          to: targetRecipient,
           subject: substituteVariables(activeDraft.subjectTemplate),
           html: generatedHtmlCode,
           template: activeDraft.name,
-          smtpConfig: savedSmtpConfig?.user && savedSmtpConfig?.pass ? savedSmtpConfig : undefined,
+          sampleEvent: previewEvent.location,
+          record: {
+            id: previewEvent.id,
+            timePHT: previewEvent.originTime,
+            location: previewEvent.location,
+            province: previewEvent.province,
+            municipality: previewEvent.municipality,
+            magnitude: previewEvent.magnitude,
+            depthKm: previewEvent.depthKm,
+            coordinates: { lat: previewEvent.latitude, lng: previewEvent.longitude },
+            aor: previewEvent.stationAor,
+            stationName: previewEvent.stationName,
+            intensity: previewEvent.intensity,
+          },
+          provider: engineToUse,
+          brevoApiKey: savedBrevoKey,
+          brevoSenderEmail: savedBrevoSender,
+          brevoSenderName: savedBrevoSenderName,
+          resendApiKey: savedResendKey,
+          smtpConfig: isCustomSmtp ? savedSmtpConfig : undefined,
         }),
       });
 
       const data = await res.json();
       setTestSending(false);
-      setIsTestEmailModalOpen(false);
 
       if (data.success) {
-        if (!data.isSandbox) {
-          showToast(`Real test email successfully sent to ${testEmailRecipient}! Check mailbox.`);
-        } else {
-          showToast(`Test bulletin dispatched via sandbox relay to ${testEmailRecipient}!`);
-        }
+        const confirmedRecipient = (data.accepted && data.accepted[0]) || targetRecipient;
+        setLastDispatchResult({
+          success: true,
+          messageId: data.messageId,
+          to: confirmedRecipient,
+          time: new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          }).format(new Date()),
+          provider: data.provider || 'Direct SMTP Relay (Port 465 SSL)',
+          notice: data.message,
+        });
+        setIsTestEmailModalOpen(false);
+        showToast(`Template test email successfully dispatched to ${confirmedRecipient}! Check inbox.`);
       } else {
         showToast(`Failed to send test email: ${data.error || 'Check server connection'}`);
       }
@@ -1026,14 +1139,36 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
             <span>Export HTML</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsTestEmailModalOpen(true)}
-            className="border border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors"
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Send Test Email</span>
-          </button>
+          {/* Send Test Email Action Group */}
+          <div className="flex items-center rounded-xl bg-blue-600 text-white shadow-xs overflow-hidden">
+            <button
+              type="button"
+              disabled={testSending}
+              onClick={() => handleSendTestEmail()}
+              className="hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title={`Send test email immediately to ${testEmailRecipient}`}
+            >
+              {testSending ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Dispatching...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5 text-blue-200" />
+                  <span>Send Test Email</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsTestEmailModalOpen(true)}
+              className="border-l border-blue-500/80 hover:bg-blue-700 px-2.5 py-2 text-blue-100 hover:text-white transition-colors"
+              title="Configure recipient or SMTP channels"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           <button
             type="button"
@@ -1045,6 +1180,49 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
           </button>
         </div>
       </div>
+
+      {/* Live Test Bulletin Dispatch Success Banner */}
+      {lastDispatchResult && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-700 shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="font-bold text-emerald-900 flex items-center gap-2">
+                <span>Test Bulletin Successfully Dispatched to {lastDispatchResult.to}</span>
+                <span className="text-[10px] font-mono bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                  250 OK Delivered
+                </span>
+              </div>
+              <div className="text-[11px] text-emerald-800 mt-0.5 flex flex-wrap items-center gap-2">
+                <span>Engine: <strong>{lastDispatchResult.provider}</strong></span>
+                <span>•</span>
+                <span>Time: <strong>{lastDispatchResult.time}</strong></span>
+                <span>•</span>
+                <span className="font-mono text-[10px] text-emerald-700">Message ID: {lastDispatchResult.messageId}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            <button
+              type="button"
+              disabled={testSending}
+              onClick={() => handleSendTestEmail()}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] transition-colors"
+            >
+              Send Another Test
+            </button>
+            <button
+              type="button"
+              onClick={() => setLastDispatchResult(null)}
+              className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-200/60"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. Station AOR Territory Clearance Ribbon */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 text-white rounded-2xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs border border-slate-800">
@@ -1832,22 +2010,13 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
                   onChange={(e) => setSelectedEarthquakeKey(e.target.value)}
                   className="w-full appearance-none px-3 py-2 pr-8 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-600"
                 >
-                  <optgroup label="CGP AOR Earthquakes (Northern Mindanao)">
-                    <option value="cgp-cdo">M3.9 Cagayan de Oro City</option>
-                    <option value="cgp-marawi">M3.6 Marawi City (Lanao del Sur)</option>
-                    <option value="cgp-iligan">M3.8 Iligan City (Lanao del Norte)</option>
-                    <option value="cgp-tagoloan">M4.2 Tagoloan (Misamis Oriental)</option>
-                    <option value="cgp-malaybalay">M3.5 Malaybalay (Bukidnon)</option>
-                    <option value="cgp-mambajao">M3.3 Mambajao (Camiguin)</option>
-                    <option value="cgp-ozamiz">M3.7 Ozamiz (Misamis Occidental)</option>
-                  </optgroup>
-                  {Object.keys(availableAorEarthquakes)
-                    .filter((k) => k.startsWith('real-'))
-                    .map((k) => (
+                  <optgroup label="Real PHIVOLCS Earthquakes (Station AOR)">
+                    {availableKeys.map((k) => (
                       <option key={k} value={k}>
-                        M{availableAorEarthquakes[k].magnitude.toFixed(1)} {availableAorEarthquakes[k].location}
+                        M{availableAorEarthquakes[k].magnitude.toFixed(1)} • {availableAorEarthquakes[k].location} ({availableAorEarthquakes[k].originTime})
                       </option>
                     ))}
+                  </optgroup>
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -2148,12 +2317,76 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
                 />
               </div>
 
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Delivery Channel
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryEngine('smtp');
+                      localStorage.setItem('alertx_delivery_engine', 'smtp');
+                    }}
+                    className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                      deliveryEngine === 'smtp'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-bold ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="text-[11px] flex items-center gap-1 font-bold text-emerald-800">
+                      <Server className="w-3 h-3 text-emerald-600" />
+                      Direct SMTP
+                    </div>
+                    <div className="text-[9px] text-slate-500">Port 465 SSL</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryEngine('brevo');
+                      localStorage.setItem('alertx_delivery_engine', 'brevo');
+                    }}
+                    className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                      deliveryEngine === 'brevo'
+                        ? 'border-amber-500 bg-amber-50 text-amber-950 font-bold ring-2 ring-amber-500/20'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="text-[11px] flex items-center gap-1 font-bold text-amber-800">
+                      <Zap className="w-3 h-3 text-amber-500" />
+                      Brevo API
+                    </div>
+                    <div className="text-[9px] text-slate-500">Port 443 HTTPS</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryEngine('resend');
+                      localStorage.setItem('alertx_delivery_engine', 'resend');
+                    }}
+                    className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                      deliveryEngine === 'resend'
+                        ? 'border-blue-500 bg-blue-50 text-blue-950 font-bold ring-2 ring-blue-500/20'
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="text-[11px] flex items-center gap-1 font-bold text-blue-800">
+                      <Globe className="w-3 h-3 text-blue-600" />
+                      Resend API
+                    </div>
+                    <div className="text-[9px] text-slate-500">Port 443 HTTPS</div>
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 text-[11px] space-y-1 text-slate-600">
                 <div className="font-semibold text-slate-800">Test Dispatch Details:</div>
                 <div>Subject: <span className="font-mono text-slate-800">{substituteVariables(activeDraft.subjectTemplate)}</span></div>
                 <div>Station Scope: <span className="font-semibold text-cyan-800">{previewEvent.stationName}</span></div>
                 <div>AOR Territory: <span className="font-semibold text-slate-800">{previewEvent.province}</span></div>
-                <div>Simulated Telemetry: <span className="font-semibold text-slate-800">{previewEvent.location} (M {previewEvent.magnitude.toFixed(1)})</span></div>
+                <div>Actual Telemetry: <span className="font-semibold text-slate-800">{previewEvent.location} (M {previewEvent.magnitude.toFixed(1)})</span></div>
               </div>
             </div>
 

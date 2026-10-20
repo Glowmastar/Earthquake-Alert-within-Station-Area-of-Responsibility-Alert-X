@@ -113,6 +113,15 @@ export function isRecordInCgpAor(record: EarthquakeRecord): boolean {
   const muni = (record.municipality || '').toLowerCase();
   const provMuni = (record.provinceMunicipality || '').toLowerCase();
 
+  // Exclude Cagayan province (Region II, Luzon) and Calayan Island
+  if ((prov === 'cagayan' || loc.includes('(cagayan)') || loc.includes('calayan')) && !loc.includes('cagayan de oro')) {
+    return false;
+  }
+  // Exclude Bohol
+  if (prov === 'bohol' || loc.includes('(bohol)')) {
+    return false;
+  }
+
   // Strictly check against the 7 approved coverage territories only
   return CGP_APPROVED_AREAS.some(
     (area) =>
@@ -121,7 +130,8 @@ export function isRecordInCgpAor(record: EarthquakeRecord): boolean {
       provMuni.includes(area) ||
       loc.includes(`(${area})`) ||
       loc.includes(`of ${area}`) ||
-      loc.includes(area)
+      (loc.includes(area) && area !== 'camiguin') ||
+      (area === 'camiguin' && (prov.includes('camiguin') || loc.includes('(camiguin)')))
   );
 }
 

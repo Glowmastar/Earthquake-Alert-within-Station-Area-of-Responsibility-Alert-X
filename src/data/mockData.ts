@@ -592,7 +592,7 @@ function buildFullEarthquakeDataset(baseRecords: EarthquakeRecord[]): Earthquake
   return result;
 }
 
-export const INITIAL_EARTHQUAKES: EarthquakeRecord[] = buildFullEarthquakeDataset(BASE_EARTHQUAKES);
+export const INITIAL_EARTHQUAKES: EarthquakeRecord[] = [];
 
 export const AOR_ZONES: Record<'PCP' | 'BIP' | 'CGP', AORZoneInfo> = {
   PCP: {

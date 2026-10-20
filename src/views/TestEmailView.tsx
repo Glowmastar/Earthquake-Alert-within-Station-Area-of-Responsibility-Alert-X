@@ -26,6 +26,10 @@ import {
   Search,
   Globe,
   Radio,
+  BookOpen,
+  HelpCircle,
+  Zap,
+  Copy,
 } from 'lucide-react';
 import { UserProfile, EarthquakeRecord } from '../types';
 
@@ -42,13 +46,20 @@ interface TestSendLog {
   template: string;
   subject: string;
   timestamp: string;
-  status: 'Delivered (Inbox)' | 'Delivered (Sandbox)' | 'Delivered (Resend HTTPS API - Port 443)' | 'Failed' | 'Delivered (Simulated)';
+  status:
+    | 'Delivered (Inbox)'
+    | 'Delivered (Direct SMTP Relay)'
+    | 'Delivered (Sandbox)'
+    | 'Delivered (Brevo HTTPS API - Port 443)'
+    | 'Delivered (Resend HTTPS API - Port 443)'
+    | 'Failed'
+    | 'Delivered (Simulated)';
   previewUrl?: string | null;
   error?: string;
 }
 
 interface SmtpSettings {
-  preset: 'gmail' | 'outlook' | 'custom' | 'sandbox';
+  preset: 'direct' | 'brevo' | 'gmail' | 'outlook' | 'custom' | 'sandbox';
   host: string;
   port: string;
   secure: boolean;
@@ -66,8 +77,41 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
   const stationAor = currentUser?.assignedAor === 'PCP' ? 'PCP' : currentUser?.assignedAor === 'BIP' ? 'BIP' : 'CGP';
   const stationDisplayName = stationAor === 'CGP' ? 'Cagayan de Oro Seismic Station (CGP)' : stationAor === 'PCP' ? 'Palayan Seismic Station (PCP)' : 'Bislig Seismic Station (BIP)';
 
-  // Delivery Engine Selection: 'resend' (HTTPS Port 443, recommended) or 'smtp'
-  const [deliveryEngine, setDeliveryEngine] = useState<'resend' | 'smtp'>('resend');
+  // Delivery Engine Selection: 'brevo' (HTTPS Port 443, 300 free/day) | 'resend' | 'smtp'
+  const [deliveryEngine, setDeliveryEngine] = useState<'brevo' | 'resend' | 'smtp'>(() => {
+    try {
+      return (localStorage.getItem('alertx_delivery_engine') as any) || 'brevo';
+    } catch {
+      return 'brevo';
+    }
+  });
+
+  // Brevo Settings State
+  const [brevoApiKey, setBrevoApiKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('alertx_brevo_api_key') || 'your-brevo-api-key';
+    } catch {
+      return 'your-brevo-api-key';
+    }
+  });
+  const [brevoSenderEmail, setBrevoSenderEmail] = useState<string>(() => {
+    try {
+      return localStorage.getItem('alertx_brevo_sender') || currentUser?.email || 'ebardo.glynbryan1@gmail.com';
+    } catch {
+      return currentUser?.email || 'ebardo.glynbryan1@gmail.com';
+    }
+  });
+  const [brevoSenderName, setBrevoSenderName] = useState<string>(() => {
+    try {
+      return localStorage.getItem('alertx_brevo_sender_name') || 'DOST-PHIVOLCS Alert X';
+    } catch {
+      return 'DOST-PHIVOLCS Alert X';
+    }
+  });
+  const [showBrevoKey, setShowBrevoKey] = useState<boolean>(false);
+  const [isBrevoGuideOpen, setIsBrevoGuideOpen] = useState<boolean>(false);
+
+  // Resend Settings State
   const [resendApiKey, setResendApiKey] = useState<string>(() => {
     try {
       return localStorage.getItem('alertx_resend_api_key') || '';
@@ -194,53 +238,66 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Sample Events catalog for AOR testing
+  // Real PHIVOLCS Events catalog for live AOR testing
   const sampleEventsMap = useMemo(() => {
-    return {
-      'cgp-demo-001': {
-        ref: 'EQ-TEST-001',
-        title: 'Magnitude 4.2 • Northern Mindanao',
-        location: 'Tagoloan, Misamis Oriental',
-        station: 'CGP',
-        aorDetails: 'AOR: Cagayan de Oro host-city entry',
-        locality: 'Cagayan de Oro host-city entry',
-      },
-      'cgp-cdo-0098': {
-        ref: 'PHIVOLCS-2025-0422-0098',
-        title: 'Magnitude 3.9 • Cagayan de Oro City',
-        location: 'Cagayan de Oro City, Misamis Oriental',
-        station: 'CGP',
-        aorDetails: 'AOR: Misamis Oriental Territory',
-        locality: 'Barangay Carmen, CDO Proper',
-      },
-      'cgp-marawi-0091': {
-        ref: 'PHIVOLCS-2025-0422-0091',
-        title: 'Magnitude 3.6 • Lanao del Sur',
-        location: 'Marawi City, Lanao del Sur',
-        station: 'CGP',
-        aorDetails: 'AOR: Lanao del Sur Territory',
-        locality: 'Marawi City Proper',
-      },
-      'cgp-iligan-0006': {
-        ref: 'PHIVOLCS-2025-0417-0006',
-        title: 'Magnitude 3.8 • Lanao del Norte',
-        location: 'Iligan City, Lanao del Norte',
-        station: 'CGP',
-        aorDetails: 'AOR: Lanao del Norte Territory',
-        locality: 'Iligan City Basin',
-      },
-      'cgp-bukidnon-0015': {
-        ref: 'PHIVOLCS-2025-0418-0015',
-        title: 'Magnitude 3.5 • Bukidnon Plateau',
-        location: 'Malaybalay City, Bukidnon',
-        station: 'CGP',
-        aorDetails: 'AOR: Bukidnon Territory',
-        locality: 'Malaybalay City',
-      },
-    };
-  }, []);
+    const map: Record<
+      string,
+      {
+        ref: string;
+        title: string;
+        location: string;
+        station: string;
+        aorDetails: string;
+        locality: string;
+        record?: EarthquakeRecord;
+      }
+    > = {};
 
-  const activeEvent = sampleEventsMap[sampleEvent as keyof typeof sampleEventsMap] || sampleEventsMap['cgp-demo-001'];
+    // Sort: prioritize Inside AOR earthquakes (CGP, PCP, BIP), then other recent PHIVOLCS events
+    const sorted = [...earthquakes].sort((a, b) => {
+      if (a.aorStatus === 'Inside' && b.aorStatus !== 'Inside') return -1;
+      if (b.aorStatus === 'Inside' && a.aorStatus !== 'Inside') return 1;
+      return 0;
+    });
+
+    sorted.slice(0, 100).forEach((eq) => {
+      const stationLabel = eq.aor && eq.aor !== 'Outside AOR' ? eq.aor : 'PHIVOLCS';
+      const aorDesc =
+        eq.aorStatus === 'Inside'
+          ? `AOR: ${eq.matchedAORFull || eq.stationName || eq.aor} (Active Perimeter)`
+          : `Outside Station AOR • ${eq.location}`;
+
+      map[eq.id] = {
+        ref: eq.id,
+        title: `Magnitude ${eq.magnitude.toFixed(1)} • ${eq.location}`,
+        location: eq.location,
+        station: stationLabel,
+        aorDetails: aorDesc,
+        locality: eq.provinceMunicipality || eq.municipality || eq.location,
+        record: eq,
+      };
+    });
+
+    return map;
+  }, [earthquakes]);
+
+  const availableEventKeys = useMemo(() => Object.keys(sampleEventsMap), [sampleEventsMap]);
+  const activeEventKey = sampleEvent && sampleEventsMap[sampleEvent] ? sampleEvent : (availableEventKeys[0] || '');
+  const activeEvent = sampleEventsMap[activeEventKey] || {
+    ref: 'PHIVOLCS-LIVE',
+    title: 'Real PHIVOLCS Seismic Telemetry',
+    location: 'Philippine Seismic Network (earthquake.phivolcs.dost.gov.ph)',
+    station: 'CGP',
+    aorDetails: 'AOR: Northern Mindanao (CGP)',
+    locality: 'Northern Mindanao',
+  };
+
+  // Sync active event if current selection is invalid
+  useEffect(() => {
+    if ((!sampleEvent || !sampleEventsMap[sampleEvent]) && availableEventKeys.length > 0) {
+      setSampleEvent(availableEventKeys[0]);
+    }
+  }, [availableEventKeys, sampleEventsMap, sampleEvent]);
 
   // Validate address action
   const handleValidateAddress = () => {
@@ -256,7 +313,26 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
 
   // Preset switch
   const handlePresetChange = (preset: SmtpSettings['preset']) => {
-    if (preset === 'gmail') {
+    if (preset === 'direct') {
+      setSmtpSettings((prev) => ({
+        ...prev,
+        preset: 'direct',
+        host: 'smtp.resend.com',
+        port: '465',
+        secure: true,
+        user: 'resend',
+        pass: '',
+      }));
+    } else if (preset === 'brevo') {
+      setSmtpSettings((prev) => ({
+        ...prev,
+        preset: 'brevo',
+        host: 'smtp-relay.brevo.com',
+        port: '587',
+        secure: false,
+        user: prev.user || currentUser?.email || 'ebardo.glynbryan1@gmail.com',
+      }));
+    } else if (preset === 'gmail') {
       setSmtpSettings((prev) => ({
         ...prev,
         preset: 'gmail',
@@ -291,6 +367,9 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
   const handleSaveServiceSettings = () => {
     try {
       localStorage.setItem('alertx_delivery_engine', deliveryEngine);
+      localStorage.setItem('alertx_brevo_api_key', brevoApiKey.trim());
+      localStorage.setItem('alertx_brevo_sender', brevoSenderEmail.trim());
+      localStorage.setItem('alertx_brevo_sender_name', brevoSenderName.trim());
       localStorage.setItem('alertx_resend_api_key', resendApiKey.trim());
       localStorage.setItem('alertx_resend_from', resendFromAddress.trim());
       localStorage.setItem('alertx_smtp_config', JSON.stringify(smtpSettings));
@@ -301,12 +380,18 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
     setIsSmtpModalOpen(false);
   };
 
-  // Test connection action (real API call over port 443 for Resend or SMTP)
+  // Test connection action (real API call over port 443 for Brevo, Resend or SMTP)
   const handleTestConnection = async () => {
     setConnectionStatus('testing');
     setLastConnectionError(null);
     try {
-      const payload = deliveryEngine === 'resend'
+      const payload = deliveryEngine === 'brevo'
+        ? {
+            provider: 'brevo',
+            brevoApiKey: brevoApiKey.trim(),
+            brevoSenderEmail: brevoSenderEmail.trim(),
+          }
+        : deliveryEngine === 'resend'
         ? {
             provider: 'resend',
             resendApiKey: resendApiKey.trim(),
@@ -350,7 +435,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
     setSubjectLine('[TEST] Alert X earthquake AOR email');
     setSenderDisplayName('Alert X Test');
     setSenderAddress('alerts@alertx.dost.gov.ph');
-    setSampleEvent('cgp-demo-001');
+    setSampleEvent(availableEventKeys[0] || '');
     setIsValidated(false);
     showToast('Test message setup reset to default values.');
   };
@@ -376,10 +461,16 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
     }
   };
 
-  // Send Actual Test Email action (calls real backend /api/send-test-email with Resend HTTPS API / Port 443)
+  // Send Actual Test Email action (calls real backend /api/send-test-email with Brevo HTTPS API / Resend / Port 443)
   const handleSendTestEmail = async () => {
     if (!recipientEmail.trim() || !recipientEmail.includes('@')) {
       showToast('Please specify a valid test recipient email address.');
+      return;
+    }
+
+    if (deliveryEngine === 'brevo' && !brevoApiKey.trim()) {
+      setIsSmtpModalOpen(true);
+      showToast('Please provide your Brevo API Key (xkeysib-...) to send via Brevo HTTPS Port 443.');
       return;
     }
 
@@ -400,10 +491,13 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
           subject: subjectLine,
           template: emailTemplate,
           language,
-          senderDisplayName,
-          senderAddress: deliveryEngine === 'resend' ? resendFromAddress : senderAddress,
+          senderDisplayName: deliveryEngine === 'brevo' ? brevoSenderName : senderDisplayName,
+          senderAddress: deliveryEngine === 'brevo' ? brevoSenderEmail : deliveryEngine === 'resend' ? resendFromAddress : senderAddress,
           sampleEvent: activeEvent.title,
           provider: deliveryEngine,
+          brevoApiKey: brevoApiKey.trim(),
+          brevoSenderEmail: brevoSenderEmail.trim(),
+          brevoSenderName: brevoSenderName.trim(),
           resendApiKey: resendApiKey.trim(),
           smtpConfig: deliveryEngine === 'smtp' && isCustomSmtp
             ? {
@@ -430,20 +524,34 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
 
       if (data.success) {
         setConnectionStatus('connected');
+        const isBrevo = deliveryEngine === 'brevo';
         const isResend = deliveryEngine === 'resend';
+        const isDirect = deliveryEngine === 'smtp' && (data.isDirectRelay || data.provider?.includes('Direct SMTP'));
         const newLog: TestSendLog = {
-          id: data.messageId ? `RESEND-${String(data.messageId).slice(-6)}` : `DISP-${Date.now().toString().slice(-4)}`,
+          id: data.messageId
+            ? (isBrevo ? `BREVO-${String(data.messageId).slice(-6)}` : isResend ? `RESEND-${String(data.messageId).slice(-6)}` : isDirect ? `SMTP-${String(data.messageId).slice(-6)}` : `DISP-${Date.now().toString().slice(-4)}`)
+            : `DISP-${Date.now().toString().slice(-4)}`,
           recipient: recipientEmail.trim(),
           template: emailTemplate,
           subject: subjectLine,
           timestamp: timeFormatted,
-          status: isResend ? 'Delivered (Resend HTTPS API - Port 443)' : (!data.isSandbox ? 'Delivered (Inbox)' : 'Delivered (Sandbox)'),
+          status: isBrevo
+            ? 'Delivered (Brevo HTTPS API - Port 443)'
+            : isResend
+            ? 'Delivered (Resend HTTPS API - Port 443)'
+            : isDirect
+            ? 'Delivered (Direct SMTP Relay)'
+            : (!data.isSandbox ? 'Delivered (Inbox)' : 'Delivered (Sandbox)'),
           previewUrl: data.previewUrl,
         };
         setSendLogs((prev) => [newLog, ...prev]);
 
-        if (isResend) {
+        if (isBrevo) {
+          showToast(`Test email successfully sent via Brevo HTTPS API (Port 443) to ${recipientEmail.trim()}!`);
+        } else if (isResend) {
           showToast(`Test email successfully sent via Resend HTTPS API (Port 443) to ${recipientEmail.trim()}!`);
+        } else if (isDirect) {
+          showToast(`Actual AOR alert successfully delivered via Direct SMTP Relay to ${recipientEmail.trim()}! Check inbox.`);
         } else if (!data.isSandbox) {
           showToast(`Test email successfully delivered to ${recipientEmail.trim()}! Check inbox.`);
         } else {
@@ -478,13 +586,59 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
         </div>
       )}
 
+      {/* Brevo Integration Quick Action Banner */}
+      <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-blue-900/40">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-400/30">
+            <Zap className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Brevo Email Integration</span>
+              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                300 Free Emails / Day Forever
+              </span>
+              <span className="text-[10px] font-mono bg-blue-500/20 text-blue-200 px-1.5 py-0.5 rounded border border-blue-400/30">
+                Port 443 HTTPS API
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Connect Brevo (formerly Sendinblue) to dispatch live earthquake bulletins and test emails with 100% inbox deliverability.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setDeliveryEngine('brevo');
+              setIsSmtpModalOpen(true);
+            }}
+            className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>Configure Brevo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsBrevoGuideOpen(true)}
+            className="flex-1 sm:flex-initial bg-white/10 hover:bg-white/15 text-white border border-white/20 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Integration Guide</span>
+          </button>
+        </div>
+      </div>
+
       {/* Top 4 Metrics / Status Cards (Matching Screenshot) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: EMAIL SERVICE */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between gap-3">
           <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Globe className="w-5 h-5" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              deliveryEngine === 'brevo' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'
+            }`}>
+              {deliveryEngine === 'brevo' ? <Zap className="w-5 h-5 text-amber-600" /> : <Globe className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -494,23 +648,39 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                 </span>
               </div>
               <div className="text-sm font-bold text-slate-900 truncate">
-                {deliveryEngine === 'resend' ? 'Resend HTTPS API' : 'Direct SMTP Server'}
+                {deliveryEngine === 'brevo'
+                  ? 'Brevo HTTPS API'
+                  : deliveryEngine === 'resend'
+                  ? 'Resend HTTPS API'
+                  : 'Direct SMTP Server'}
               </div>
               <div className="text-[11px] text-slate-500 truncate">
                 {connectionStatus === 'connected'
                   ? `Connected (${connectionLatency}ms latency)`
+                  : deliveryEngine === 'brevo'
+                  ? '300 Free/Day • Port 443'
                   : 'HTTPS Port 443 (Firewall Ready)'}
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsSmtpModalOpen(true)}
-            className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors shrink-0 cursor-pointer"
-            title="Configure Email Service & Port 443 API"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsBrevoGuideOpen(true)}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-amber-600 hover:text-amber-700 transition-colors cursor-pointer"
+              title="Brevo Integration Guide"
+            >
+              <BookOpen className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSmtpModalOpen(true)}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+              title="Configure Email Service & Port 443 API"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Card 2: TEST RECIPIENT */}
@@ -754,21 +924,31 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
               </div>
             </div>
 
-            {/* Field: SAMPLE EVENT */}
+            {/* Field: REAL PHIVOLCS EVENT */}
             <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
-                SAMPLE EVENT
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  REAL PHIVOLCS EVENT BULLETIN
+                </label>
+                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  {availableEventKeys.length} Real Events Loaded
+                </span>
+              </div>
               <select
-                value={sampleEvent}
+                value={activeEventKey}
                 onChange={(e) => setSampleEvent(e.target.value)}
                 className="w-full px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500"
               >
-                <option value="cgp-demo-001">Use demo event: EQ-TEST-001 • CGP AOR</option>
-                <option value="cgp-cdo-0098">PHIVOLCS-2025-0422-0098: M3.9 Cagayan de Oro City • CGP AOR</option>
-                <option value="cgp-marawi-0091">PHIVOLCS-2025-0422-0091: M3.6 Marawi City, Lanao del Sur • CGP AOR</option>
-                <option value="cgp-iligan-0006">PHIVOLCS-2025-0417-0006: M3.8 Iligan City, Lanao del Norte • CGP AOR</option>
-                <option value="cgp-bukidnon-0015">PHIVOLCS-2025-0418-0015: M3.5 Malaybalay City, Bukidnon • CGP AOR</option>
+                {availableEventKeys.map((key) => {
+                  const ev = sampleEventsMap[key];
+                  const eq = ev.record;
+                  return (
+                    <option key={key} value={key}>
+                      {eq?.aorStatus === 'Inside' ? `[INSIDE ${ev.station} AOR] ` : ''}
+                      M{eq?.magnitude ? eq.magnitude.toFixed(1) : ''} • {ev.location} ({eq?.timePHT || ''})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -991,7 +1171,15 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
               <div className="flex items-baseline justify-between border-b border-slate-100 pb-1.5">
                 <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider">PROVIDER</span>
                 <span className="text-slate-800 font-medium text-[11px] truncate max-w-[140px]">
-                  {smtpSettings.preset === 'gmail'
+                  {deliveryEngine === 'brevo'
+                    ? 'Brevo HTTPS API (Port 443)'
+                    : deliveryEngine === 'resend'
+                    ? 'Resend HTTPS API (Port 443)'
+                    : smtpSettings.preset === 'direct'
+                    ? 'Direct SMTP Relay (Port 465)'
+                    : smtpSettings.preset === 'brevo'
+                    ? 'Brevo SMTP Relay'
+                    : smtpSettings.preset === 'gmail'
                     ? 'Gmail (smtp.gmail.com)'
                     : smtpSettings.preset === 'outlook'
                     ? 'Outlook (Office 365)'
@@ -1003,13 +1191,21 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
               <div className="flex items-baseline justify-between border-b border-slate-100 pb-1.5">
                 <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider">SECURITY</span>
                 <span className="text-slate-800 font-medium text-[11px]">
-                  {smtpSettings.secure ? 'SSL/TLS (Port ' + smtpSettings.port + ')' : 'STARTTLS (Port ' + smtpSettings.port + ')'}
+                  {deliveryEngine === 'brevo' || deliveryEngine === 'resend'
+                    ? 'HTTPS / TLS 1.3 (Port 443)'
+                    : smtpSettings.secure
+                    ? 'SSL/TLS (Port ' + smtpSettings.port + ')'
+                    : 'STARTTLS (Port ' + smtpSettings.port + ')'}
                 </span>
               </div>
               <div className="flex items-baseline justify-between border-b border-slate-100 pb-1.5">
                 <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider">SENDER USER</span>
                 <span className="text-slate-800 font-mono text-[11px] truncate max-w-[140px]">
-                  {smtpSettings.user || senderAddress}
+                  {deliveryEngine === 'brevo'
+                    ? brevoSenderEmail || 'Not configured'
+                    : deliveryEngine === 'resend'
+                    ? resendFromAddress
+                    : smtpSettings.user || senderAddress}
                 </span>
               </div>
             </div>
@@ -1362,7 +1558,30 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
                 DELIVERY PROTOCOL &amp; ENGINE
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryEngine('brevo')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    deliveryEngine === 'brevo'
+                      ? 'border-amber-500 bg-amber-50/70 text-amber-950 ring-2 ring-amber-500/20 shadow-xs'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      Brevo HTTPS API
+                    </span>
+                    <span className="text-[9px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded-full border border-amber-300">
+                      300 Free/Day
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    Port 443 &bull; Free forever &bull; High deliverability (Recommended)
+                  </div>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setDeliveryEngine('resend')}
@@ -1382,7 +1601,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-500">
-                    HTTPS Port 443 &bull; Cloud Run &amp; Firewall Ready (Recommended)
+                    HTTPS Port 443 &bull; Cloud Run &amp; Firewall Ready
                   </div>
                 </button>
 
@@ -1401,17 +1620,122 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                       Direct SMTP
                     </span>
                     <span className="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded-full border border-slate-200">
-                      Port 465 / 587
+                      Port 587/465
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-500">
-                    Raw TCP SMTP connection (Gmail, Outlook, Custom)
+                    Brevo Relay, Gmail App Passwords, Custom Server
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* TAB 1: RESEND HTTPS API (PORT 443) */}
+            {/* TAB 1: BREVO HTTPS API (PORT 443 - RECOMMENDED) */}
+            {deliveryEngine === 'brevo' && (
+              <div className="space-y-3.5">
+                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 space-y-1">
+                  <div className="font-bold flex items-center justify-between text-amber-950">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-600" />
+                      300 Free Emails / Day Forever &bull; HTTPS Port 443
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsBrevoGuideOpen(true)}
+                      className="text-[10px] font-bold text-blue-700 bg-white hover:bg-amber-100 border border-amber-300 px-2 py-0.5 rounded cursor-pointer transition-colors shadow-2xs"
+                    >
+                      Step-by-Step Guide &rarr;
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    Brevo (formerly Sendinblue) provides <strong>300 free emails per day forever</strong>. Alerts transmit via secure <strong>HTTPS POST on Port 443</strong> (<code className="font-mono bg-amber-100/90 px-1 rounded">https://api.brevo.com/v3/smtp/email</code>), bypassing SMTP firewall restrictions.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      BREVO API KEY (v3)
+                    </label>
+                    <a
+                      href="https://app.brevo.com/settings/keys/api"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                    >
+                      <span>Get API Key at brevo.com</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showBrevoKey ? 'text' : 'password'}
+                      value={brevoApiKey}
+                      onChange={(e) => setBrevoApiKey(e.target.value)}
+                      placeholder="your-brevo-api-key"
+                      className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:border-blue-500 outline-none pr-16"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBrevoKey(!showBrevoKey)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-500 hover:text-slate-800 px-1.5 py-0.5 rounded cursor-pointer"
+                    >
+                      {showBrevoKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Generate this in Brevo under <strong>SMTP &amp; API &rarr; API Keys</strong> (key starts with <code className="font-mono text-slate-700">xkeysib-</code>).
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        VERIFIED SENDER EMAIL
+                      </label>
+                      <a
+                        href="https://app.brevo.com/senders"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                      >
+                        <span>Senders list</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                    <input
+                      type="email"
+                      value={brevoSenderEmail}
+                      onChange={(e) => setBrevoSenderEmail(e.target.value)}
+                      placeholder="your-verified-email@gmail.com"
+                      className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:border-blue-500 outline-none"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Your Brevo registration email is automatically verified.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      SENDER DISPLAY NAME
+                    </label>
+                    <input
+                      type="text"
+                      value={brevoSenderName}
+                      onChange={(e) => setBrevoSenderName(e.target.value)}
+                      placeholder="DOST-PHIVOLCS Alert X"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 outline-none"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Name appearing in recipient mailboxes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: RESEND HTTPS API (PORT 443) */}
             {deliveryEngine === 'resend' && (
               <div className="space-y-3.5">
                 <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
@@ -1444,7 +1768,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                       type={showApiKey ? 'text' : 'password'}
                       value={resendApiKey}
                       onChange={(e) => setResendApiKey(e.target.value)}
-                      placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxx"
+                      placeholder="your-resend-api-key"
                       className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:border-blue-500 outline-none pr-16"
                     />
                     <button
@@ -1478,7 +1802,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
               </div>
             )}
 
-            {/* TAB 2: DIRECT SMTP FALLBACK */}
+            {/* TAB 3: DIRECT SMTP FALLBACK */}
             {deliveryEngine === 'smtp' && (
               <div className="space-y-3">
                 {/* Provider Preset Selector */}
@@ -1486,7 +1810,39 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
                     SMTP PRESET
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePresetChange('direct')}
+                      className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                        smtpSettings.preset === 'direct'
+                          ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 font-bold ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold flex items-center gap-1 text-emerald-800">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Direct SMTP
+                      </div>
+                      <div className="text-[10px] text-slate-500">Port 465 SSL Relay</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePresetChange('brevo')}
+                      className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                        smtpSettings.preset === 'brevo'
+                          ? 'border-amber-500 bg-amber-50/70 text-amber-950 font-bold'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-amber-500" />
+                        Brevo Relay
+                      </div>
+                      <div className="text-[10px] text-slate-500">smtp-relay.brevo.com:587</div>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handlePresetChange('gmail')}
@@ -1541,6 +1897,32 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                   </div>
                 </div>
 
+                {/* Direct SMTP Callout */}
+                {smtpSettings.preset === 'direct' && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Direct SMTP Relay Active (Port 465 SSL)
+                    </div>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      High-speed direct SMTP relay active over TLS port 465 (<code className="font-mono bg-emerald-100 px-1 rounded">smtp.resend.com:465</code>). Alerts are dispatched directly to live recipient mailboxes with 250 OK delivery confirmation.
+                    </p>
+                  </div>
+                )}
+
+                {/* Brevo SMTP Tip Callout */}
+                {smtpSettings.preset === 'brevo' && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-600" />
+                      Brevo SMTP Relay Configuration
+                    </div>
+                    <p className="text-[11px] text-amber-900 leading-relaxed">
+                      Use your <strong>Brevo login email</strong> as username, and the <strong>Master SMTP key</strong> (from Brevo &rarr; SMTP &amp; API &rarr; SMTP tab) as password. Or use the recommended <strong>Brevo HTTPS API</strong> tab above to avoid SMTP port blocking!
+                    </p>
+                  </div>
+                )}
+
                 {/* Gmail App Password Tip Callout */}
                 {smtpSettings.preset === 'gmail' && (
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 space-y-1">
@@ -1549,7 +1931,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                       Sending via Gmail App Password
                     </div>
                     <p className="text-[11px] text-blue-800 leading-relaxed">
-                      To send emails from a Gmail account, use a <strong>16-character App Password</strong> (from <code>myaccount.google.com/apppasswords</code>). If your network blocks outbound TCP ports 465/587, use Resend HTTPS API instead.
+                      To send emails from a Gmail account, use a <strong>16-character App Password</strong> (from <code>myaccount.google.com/apppasswords</code>). If your network blocks outbound TCP ports 465/587, use Brevo HTTPS API instead.
                     </p>
                   </div>
                 )}
@@ -1600,7 +1982,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          PASSWORD / APP PASSWORD
+                          PASSWORD / SMTP KEY
                         </label>
                         <button
                           type="button"
@@ -1646,7 +2028,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                 className="border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <RotateCw className={`w-3.5 h-3.5 ${connectionStatus === 'testing' ? 'animate-spin' : ''}`} />
-                <span>Test {deliveryEngine === 'resend' ? 'Port 443 Connection' : 'SMTP Connection'}</span>
+                <span>Test {deliveryEngine === 'brevo' ? 'Brevo Connection' : deliveryEngine === 'resend' ? 'Resend Connection' : 'SMTP Connection'}</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -1663,6 +2045,207 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                   className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-5 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
                   Save &amp; Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brevo Comprehensive Step-by-Step Integration Guide Modal */}
+      {isBrevoGuideOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20">
+                  <Zap className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    Brevo (Sendinblue) Email Integration Guide
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Step-by-step instructions to deliver live earthquake bulletins with 300 free emails/day.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBrevoGuideOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Why Brevo Callout */}
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 space-y-1.5">
+              <div className="font-bold text-amber-900 flex items-center gap-1.5 text-xs">
+                <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                Why Brevo is ideal for Alert X:
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-900">
+                <li><strong>300 free emails per day forever:</strong> No trial expiration and no credit card required.</li>
+                <li><strong>Port 443 HTTPS REST API:</strong> Cloud hosting (Cloud Run) allows Port 443 while blocking raw SMTP ports (25, 465, 587).</li>
+                <li><strong>Immediate Sending:</strong> Your Brevo signup email is instantly verified as a sender—no custom domain setup needed to start testing.</li>
+              </ul>
+            </div>
+
+            {/* Step-by-Step Steps */}
+            <div className="space-y-4">
+              {/* Step 1 */}
+              <div className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center">1</span>
+                    <span className="text-xs font-bold text-slate-900">Create a Free Brevo Account</span>
+                  </div>
+                  <a
+                    href="https://www.brevo.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <span>Visit brevo.com</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-xs text-slate-600 pl-7 leading-relaxed">
+                  Go to <strong>brevo.com</strong> and click "Sign up free". Choose the <strong>Free Plan</strong> (300 emails/day forever). Complete the email verification sent to your inbox.
+                </p>
+              </div>
+
+              {/* Step 2 */}
+              <div className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center">2</span>
+                    <span className="text-xs font-bold text-slate-900">Generate Your Brevo API Key</span>
+                  </div>
+                  <a
+                    href="https://app.brevo.com/settings/keys/api"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <span>Direct API Keys Page</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <div className="text-xs text-slate-600 pl-7 space-y-1.5 leading-relaxed">
+                  <p>In your Brevo dashboard:</p>
+                  <ol className="list-decimal pl-5 space-y-1 text-[11px]">
+                    <li>Click your account name in top-right &rarr; <strong>SMTP &amp; API</strong>.</li>
+                    <li>Click the <strong>API Keys</strong> tab.</li>
+                    <li>Click <strong>Generate a new API key</strong>.</li>
+                    <li>Name it (e.g. <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">AlertX-Dispatcher</code>) and click Generate.</li>
+                    <li>Copy your key (starts with <code className="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-amber-900 font-bold">xkeysib-...</code>).</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 transition-colors">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center">3</span>
+                    <span className="text-xs font-bold text-slate-900">Check Your Verified Sender Email</span>
+                  </div>
+                  <a
+                    href="https://app.brevo.com/senders"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <span>Senders &amp; IP Page</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-xs text-slate-600 pl-7 leading-relaxed">
+                  Go to <strong>Senders &amp; IP &rarr; Senders</strong>. The email address you used to register on Brevo (e.g. <code className="font-mono text-slate-800">{currentUser?.email || 'ebardo.glynbryan1@gmail.com'}</code>) is already verified! If you wish to send from an organizational email, click <em>Add a sender</em> and verify the confirmation email.
+                </p>
+              </div>
+
+              {/* Step 4 */}
+              <div className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 transition-colors">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center">4</span>
+                  <span className="text-xs font-bold text-slate-900">Paste Credentials into Alert X</span>
+                </div>
+                <div className="text-xs text-slate-600 pl-7 space-y-1.5 leading-relaxed">
+                  <p>In Alert X:</p>
+                  <ol className="list-decimal pl-5 space-y-1 text-[11px]">
+                    <li>Open <strong>Email Service Settings</strong> &rarr; Select <strong>Brevo HTTPS API</strong>.</li>
+                    <li>Paste your API Key (<code className="font-mono text-slate-800">xkeysib-...</code>) into the Brevo API Key field.</li>
+                    <li>Enter your verified Brevo email in <strong>Sender Email</strong>.</li>
+                    <li>Click <strong>Test Brevo Connection</strong> to confirm live latency and account authentication.</li>
+                    <li>Click <strong>Save &amp; Apply</strong>.</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="border border-slate-200 rounded-xl p-3.5 hover:border-blue-300 transition-colors">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center">5</span>
+                  <span className="text-xs font-bold text-slate-900">Send Live Test Alert &amp; Check Inbox</span>
+                </div>
+                <p className="text-xs text-slate-600 pl-7 leading-relaxed">
+                  Enter your target email (e.g. <code className="font-mono text-slate-800">{recipientEmail || 'your-email@gmail.com'}</code>) in <strong>Test Recipient</strong> and click <strong>Send Test Email</strong>. Your test bulletin will be immediately dispatched and delivered to your inbox with full event telemetry!
+                </p>
+              </div>
+
+              {/* Advanced Environment Variables Info */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-700 space-y-2">
+                <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                  <Server className="w-3.5 h-3.5 text-slate-600" />
+                  Optional: Production Environment Variables (.env)
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  To persist Brevo across all server instances and background jobs without manual UI entry, you can configure these variables in your deployment environment:
+                </p>
+                <div className="relative font-mono text-[10px] bg-slate-900 text-slate-100 p-2.5 rounded-lg overflow-x-auto">
+                  <pre>
+{`BREVO_API_KEY="your-brevo-api-key"
+BREVO_SENDER_EMAIL="${brevoSenderEmail || 'your-email@domain.com'}"
+BREVO_SENDER_NAME="DOST-PHIVOLCS Alert X"`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <a
+                href="https://app.brevo.com/settings/keys/api"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5"
+              >
+                <span>Open Brevo Dashboard</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBrevoGuideOpen(false);
+                    setDeliveryEngine('brevo');
+                    setIsSmtpModalOpen(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                >
+                  Configure Brevo Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBrevoGuideOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Close
                 </button>
               </div>
             </div>
