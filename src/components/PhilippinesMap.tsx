@@ -46,6 +46,11 @@ interface PhilippinesMapProps {
   onClearSelectedEarthquake?: () => void;
   selectedAorFilter?: AORType | 'ALL';
   currentUser?: UserProfile;
+  isDashboard?: boolean;
+  mapHeight?: number;
+  onHeightChange?: (height: number) => void;
+  mapWidthPercent?: number;
+  onWidthPercentChange?: (pct: number) => void;
 }
 
 type BasemapType =
@@ -118,6 +123,11 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
   onClearSelectedEarthquake,
   selectedAorFilter = 'ALL',
   currentUser,
+  isDashboard = false,
+  mapHeight = 680,
+  onHeightChange,
+  mapWidthPercent = 52,
+  onWidthPercentChange,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -130,6 +140,11 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
     currentUser?.email?.includes('cagayan') ||
     currentUser?.name?.toLowerCase().includes('cagayan');
 
+  const isStationScoped =
+    isCgpScoped ||
+    selectedAorFilter === 'PCP' ||
+    (currentUser?.assignedAor && currentUser.assignedAor !== 'ALL');
+
   // Layer groups refs
   const regionsLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const provincesLayerGroupRef = useRef<L.LayerGroup | null>(null);
@@ -139,7 +154,7 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
   // Layer visibility state
   const [showRegions, setShowRegions] = useState<boolean>(true);
-  const [showProvinces, setShowProvinces] = useState<boolean>(true);
+  const [showProvinces, setShowProvinces] = useState<boolean>(!isDashboard);
   const [showAorBoundaries, setShowAorBoundaries] = useState<boolean>(true);
   const [showStations, setShowStations] = useState<boolean>(true);
   const [showEarthquakes, setShowEarthquakes] = useState<boolean>(true);
@@ -433,12 +448,31 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
 
     mapInstanceRef.current = map;
 
+    // Attach ResizeObserver to automatically invalidate Leaflet size when stretched horizontally or vertically
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
     // Cleanup on unmount
     return () => {
+      resizeObserver.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Invalidate map size whenever mapHeight or mapWidthPercent changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [mapHeight, mapWidthPercent]);
 
   // Update Basemap Tiles
   useEffect(() => {
@@ -791,33 +825,33 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
     if (!showStations) return;
 
     const stationsToRender = isCgpScoped
-      ? SEISMIC_STATIONS.filter((st) => {
-          // Strictly exclude PCP and BIP stations
-          if (
-            st.code === 'PCP' ||
-            st.code === 'BIP' ||
-            st.parentScss === 'PCP' ||
-            st.parentScss === 'BIP' ||
-            st.aorZone === 'PCP' ||
-            st.aorZone === 'BIP'
-          ) {
-            return false;
-          }
-          return (
-            st.code === 'CGP' ||
-            st.parentScss === 'CGP' ||
-            st.aorZone === 'CGP' ||
-            st.location.includes('Misamis') ||
-            st.location.includes('Cagayan de Oro') ||
-            st.location.includes('Bukidnon') ||
-            st.location.includes('Camiguin') ||
-            st.location.includes('Lanao') ||
-            (st.coordinates[0] >= 7.4 &&
-              st.coordinates[0] <= 9.6 &&
-              st.coordinates[1] >= 123.4 &&
-              st.coordinates[1] <= 125.6)
-          );
-        })
+      ? isDashboard
+        ? SEISMIC_STATIONS.filter((st) => st.code === 'CGP')
+        : SEISMIC_STATIONS.filter((st) => {
+            // Strictly exclude PCP and BIP stations
+            if (
+              st.code === 'PCP' ||
+              st.code === 'BIP' ||
+              st.parentScss === 'PCP' ||
+              st.parentScss === 'BIP' ||
+              st.aorZone === 'PCP' ||
+              st.aorZone === 'BIP'
+            ) {
+              return false;
+            }
+            return (
+              st.code === 'CGP' ||
+              st.parentScss === 'CGP' ||
+              st.aorZone === 'CGP' ||
+              st.location.includes('Misamis') ||
+              st.location.includes('Cagayan de Oro') ||
+              st.location.includes('Bukidnon') ||
+              st.location.includes('Camiguin') ||
+              st.location.includes('Lanao')
+            );
+          })
+      : isDashboard && selectedAorFilter === 'PCP'
+      ? SEISMIC_STATIONS.filter((st) => st.code === 'PCP')
       : selectedAorFilter && selectedAorFilter !== 'ALL'
       ? SEISMIC_STATIONS.filter((st) => {
           if (selectedAorFilter === 'PCP') {
@@ -1073,39 +1107,44 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
         : 'bg-white border-slate-200 text-slate-800 map-light-theme'
     }`}>
       {/* Top Header Bar */}
-      <div className={`px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 z-30 border-b rounded-t-2xl transition-colors ${
+      <div className={`px-4 py-3 flex flex-wrap items-center justify-between gap-3 z-30 border-b rounded-t-2xl transition-colors ${
         mapTheme === 'dark'
           ? 'bg-[#030d24] text-white border-slate-800/90'
-          : 'bg-slate-900 text-white border-slate-800'
+          : 'bg-white text-slate-900 border-slate-200'
       }`}>
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-500/50 flex items-center justify-center text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
-            <Compass className="w-4 h-4 animate-spin-slow" />
-          </div>
           <div>
-            <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-              {isCgpScoped
-                ? 'CGP Station Geographic Seismic Map'
-                : selectedAorFilter === 'PCP'
-                ? 'PCP Station Geographic Seismic Map'
-                : 'Philippines Geographic Seismic Monitoring Map'}
+            <h2 className="text-sm sm:text-base font-bold tracking-tight flex items-center gap-2">
+              <span className={mapTheme === 'dark' ? 'text-white' : 'text-slate-900'}>
+                {isCgpScoped
+                  ? 'CGP Station Geographic Seismic Map'
+                  : selectedAorFilter === 'PCP'
+                  ? 'PCP Station Geographic Seismic Map'
+                  : 'Philippines Geographic Seismic Monitoring Map'}
+              </span>
               <span
-                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
                   isCgpScoped
-                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/60 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
-                    : 'bg-blue-950 text-cyan-300 border border-cyan-500/50'
+                    ? mapTheme === 'dark'
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/60'
+                      : 'bg-blue-100 text-blue-700 border border-blue-200'
+                    : selectedAorFilter === 'PCP'
+                    ? mapTheme === 'dark'
+                      ? 'bg-blue-950 text-cyan-300 border border-cyan-500/50'
+                      : 'bg-blue-100 text-blue-700 border border-blue-200'
+                    : 'bg-blue-50 text-blue-700 border border-blue-200'
                 }`}
               >
                 {isCgpScoped
-                  ? 'Scoped to CGP AOR (Northern Mindanao)'
+                  ? 'CGP AOR (Northern Mindanao)'
                   : selectedAorFilter === 'PCP'
-                  ? 'Scoped to PCP AOR (Central Luzon)'
+                  ? 'PCP AOR (Central Luzon)'
                   : 'Tactical GIS Telemetry • 15 AORs'}
               </span>
             </h2>
-            <p className="text-[11px] text-slate-300">
+            <p className={`text-xs ${mapTheme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
               {isCgpScoped
-                ? 'Real-time CGP station AOR & Northern Mindanao epicenter projection (PCP & BIP AORs filtered)'
+                ? 'Real-time CGP station AOR & earthquake epicenter locations'
                 : selectedAorFilter === 'PCP'
                 ? 'Real-time PCP station AOR & Central Luzon epicenter projection'
                 : 'Automated satellite telemetry & official PHIVOLCS station AORs'}
@@ -1123,16 +1162,18 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
                 setShowQuickJumpDropdown((prev) => !prev);
                 setShowLayersDropdown(false);
               }}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors shadow-xs ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors shadow-2xs cursor-pointer ${
                 showQuickJumpDropdown
-                  ? 'bg-cyan-600 text-white border-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
-                  : 'bg-[#061433] hover:bg-[#0b1f4d] text-slate-200 border-slate-700/80'
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
+                  : mapTheme === 'dark'
+                  ? 'bg-[#061433] hover:bg-[#0b1f4d] text-slate-200 border-slate-700/80'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
               }`}
               title="Jump to Region or Province"
             >
-              <Search className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Jump to Region / Province</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showQuickJumpDropdown ? 'rotate-180 text-cyan-300' : ''}`} />
+              <MapPin className={`w-3.5 h-3.5 ${mapTheme === 'dark' ? 'text-cyan-400' : 'text-blue-600'}`} />
+              <span>{isCgpScoped ? 'CGP AOR (Northern Mindanao)' : selectedAorFilter === 'PCP' ? 'PCP AOR (Central Luzon)' : 'Jump to Region / Province'}</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showQuickJumpDropdown ? 'rotate-180 text-blue-600' : ''}`} />
             </button>
 
             {showQuickJumpDropdown && (
@@ -1269,75 +1310,39 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
             )}
           </div>
 
-          {/* Quick Islands Presets */}
-          <div className="hidden sm:flex items-center gap-1 bg-[#061433] p-0.5 rounded-lg border border-slate-700/80 text-xs">
-            {isCgpScoped ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([8.482, 124.647], 8.5)}
-                  className="px-2 py-1 rounded bg-cyan-700 text-white font-medium transition-colors"
-                >
-                  CGP AOR (Northern Mindanao)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([8.0, 125.0], 7.5)}
-                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                >
-                  Mindanao
-                </button>
-              </>
-            ) : selectedAorFilter === 'PCP' ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([15.541, 121.084], 8.5)}
-                  className="px-2 py-1 rounded bg-blue-700 text-white font-medium transition-colors"
-                >
-                  PCP AOR (Central Luzon)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([15.5, 121.0], 7.5)}
-                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                >
-                  Luzon
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleResetView}
-                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                >
-                  All PH
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([16.5, 121.0], 7)}
-                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                >
-                  Luzon
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([11.0, 123.5], 7.5)}
-                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                >
-                  Visayas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleZoomToPreset([8.0, 125.0], 7)}
-                  className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-                >
-                  Mindanao
-                </button>
-              </>
-            )}
-          </div>
+          {/* Quick Islands Presets (Shown when not station scoped) */}
+          {!isStationScoped && (
+            <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={handleResetView}
+                className="px-2 py-1 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+              >
+                All PH
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZoomToPreset([16.5, 121.0], 7)}
+                className="px-2 py-1 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+              >
+                Luzon
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZoomToPreset([11.0, 123.5], 7.5)}
+                className="px-2 py-1 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+              >
+                Visayas
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZoomToPreset([8.0, 125.0], 7)}
+                className="px-2 py-1 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+              >
+                Mindanao
+              </button>
+            </div>
+          )}
 
           {/* Layers Dropdown */}
           <div className="relative" ref={layersDropdownRef}>
@@ -1347,16 +1352,18 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
                 setShowLayersDropdown((prev) => !prev);
                 setShowQuickJumpDropdown(false);
               }}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors shadow-xs ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors shadow-2xs cursor-pointer ${
                 showLayersDropdown
-                  ? 'bg-cyan-600 text-white border-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
-                  : 'bg-[#061433] hover:bg-[#0b1f4d] text-slate-200 border-slate-700/80'
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
+                  : mapTheme === 'dark'
+                  ? 'bg-[#061433] hover:bg-[#0b1f4d] text-slate-200 border-slate-700/80'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
               }`}
               title="Toggle Map Layers"
             >
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <Layers className={`w-3.5 h-3.5 ${mapTheme === 'dark' ? 'text-cyan-400' : 'text-blue-600'}`} />
               <span>Layers</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showLayersDropdown ? 'rotate-180 text-cyan-300' : ''}`} />
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showLayersDropdown ? 'rotate-180 text-blue-600' : ''}`} />
             </button>
 
             {showLayersDropdown && (
@@ -1506,60 +1513,133 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
             )}
           </div>
 
-          {/* Search & Filter Parameters Button */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setShowSearchParametersPanel((prev) => !prev);
-                setShowLayersDropdown(false);
-                setShowQuickJumpDropdown(false);
-              }}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-xs cursor-pointer ${
-                showSearchParametersPanel
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
-                  : isCustomFilterActive
-                  ? 'bg-amber-950 text-amber-200 border-amber-500 hover:bg-amber-900'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-              }`}
-              title="Search and filter earthquakes by parameters"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-              <span>Search &amp; Parameters</span>
-              {isCustomFilterActive && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          {/* Controls for Dashboard View: Quick Width Stretch & Height Adjust buttons */}
+          {isDashboard ? (
+            <div className="flex items-center gap-1.5">
+              {/* Width presets */}
+              {onWidthPercentChange && (
+                <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                  <span className="text-[10px] text-slate-500 font-semibold px-1">Width:</span>
+                  <button
+                    type="button"
+                    onClick={() => onWidthPercentChange(50)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                      Math.abs(mapWidthPercent - 50) < 3
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                    }`}
+                    title="Default 50% split"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onWidthPercentChange(65)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                      Math.abs(mapWidthPercent - 65) < 3
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                    }`}
+                    title="Stretch map to 65% width"
+                  >
+                    65%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onWidthPercentChange(75)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                      Math.abs(mapWidthPercent - 75) < 3
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                    }`}
+                    title="Stretch map to 75% width"
+                  >
+                    75%
+                  </button>
+                </div>
               )}
-            </button>
-          </div>
 
-          {/* Light Mode / Dark Mode Switcher (Default: Light Mode) */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={handleToggleMapTheme}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-xs cursor-pointer ${
-                mapTheme === 'light'
-                  ? 'bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border-amber-400/60 hover:border-amber-300 ring-1 ring-amber-400/40'
-                  : 'bg-indigo-950 hover:bg-indigo-900 text-indigo-200 border-indigo-700/80 hover:border-indigo-500'
-              }`}
-              title={`Currently in ${mapTheme === 'light' ? 'Light Mode (Default)' : 'Dark Mode'}. Click to toggle.`}
-            >
-              {mapTheme === 'light' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-300 fill-amber-400/40" />
-                  <span>Light Mode</span>
-                  <span className="text-[9px] bg-amber-400/30 text-amber-200 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
-                    Default
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-indigo-300 fill-indigo-400/30" />
-                  <span>Dark Mode</span>
-                </>
+              {/* Height presets */}
+              {onHeightChange && (
+                <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                  <span className="text-[10px] text-slate-500 font-semibold px-1">Height:</span>
+                  <button
+                    type="button"
+                    onClick={() => onHeightChange(Math.min(1100, mapHeight + 100))}
+                    className="px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-700 hover:text-blue-700 hover:bg-white transition-colors"
+                    title="Stretch map downwards (+100px)"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onHeightChange(Math.max(460, mapHeight - 100))}
+                    className="px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-700 hover:text-blue-700 hover:bg-white transition-colors"
+                    title="Shrink map height (-100px)"
+                  >
+                    -
+                  </button>
+                </div>
               )}
-            </button>
-          </div>
+            </div>
+          ) : (
+            <>
+              {/* Search & Filter Parameters Button */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSearchParametersPanel((prev) => !prev);
+                    setShowLayersDropdown(false);
+                    setShowQuickJumpDropdown(false);
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-xs cursor-pointer ${
+                    showSearchParametersPanel
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                      : isCustomFilterActive
+                      ? 'bg-amber-950 text-amber-200 border-amber-500 hover:bg-amber-900'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  }`}
+                  title="Search and filter earthquakes by parameters"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Search &amp; Parameters</span>
+                  {isCustomFilterActive && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  )}
+                </button>
+              </div>
+
+              {/* Light Mode / Dark Mode Switcher (Default: Light Mode) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={handleToggleMapTheme}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-xs cursor-pointer ${
+                    mapTheme === 'light'
+                      ? 'bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border-amber-400/60 hover:border-amber-300 ring-1 ring-amber-400/40'
+                      : 'bg-indigo-950 hover:bg-indigo-900 text-indigo-200 border-indigo-700/80 hover:border-indigo-500'
+                  }`}
+                  title={`Currently in ${mapTheme === 'light' ? 'Light Mode (Default)' : 'Dark Mode'}. Click to toggle.`}
+                >
+                  {mapTheme === 'light' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-300 fill-amber-400/40" />
+                      <span>Light Mode</span>
+                      <span className="text-[9px] bg-amber-400/30 text-amber-200 px-1 py-0.2 rounded font-bold uppercase tracking-wider">
+                        Default
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-indigo-300 fill-indigo-400/30" />
+                      <span>Dark Mode</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -2018,100 +2098,43 @@ export const PhilippinesMap: React.FC<PhilippinesMapProps> = ({
           </div>
         )}
 
-        {/* Floating Legend Top Right */}
-        <div className={`absolute top-4 right-4 z-20 backdrop-blur-md rounded-2xl p-3.5 shadow-xl text-[11px] space-y-2 max-w-[220px] pointer-events-auto transition-colors ${
+        {/* Floating Legend Bottom Right */}
+        <div className={`absolute bottom-4 right-4 z-20 backdrop-blur-md rounded-xl p-3 shadow-md text-xs space-y-2 min-w-[210px] pointer-events-auto transition-colors ${
           mapTheme === 'dark'
             ? 'bg-[#02091c]/92 border border-slate-700/80 text-slate-200'
             : 'bg-white/95 border border-slate-200 text-slate-800'
         }`}>
-          <div className={`text-[10px] font-bold uppercase tracking-wider border-b pb-1 flex items-center justify-between ${
-            mapTheme === 'dark' ? 'text-slate-400 border-slate-800' : 'text-slate-500 border-slate-200'
-          }`}>
-            <span>AOR Stations &amp; Events</span>
-            <span className={`font-mono text-[9px] px-1.5 py-0.2 rounded border ${
-              mapTheme === 'dark'
-                ? 'text-cyan-400 bg-cyan-950 border-cyan-800'
-                : 'text-blue-700 bg-blue-50 border-blue-200 font-bold'
-            }`}>
-              {isCgpScoped
-                ? 'CGP Only'
-                : selectedAorFilter === 'PCP'
-                ? 'PCP Only'
-                : 'Active'}
-            </span>
-          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5">
+              <span className="w-4 h-3.5 rounded-xs border-2 border-emerald-500 bg-emerald-500/10 inline-block shrink-0" />
+              <span className="font-semibold text-slate-800 text-[11px]">
+                {isCgpScoped
+                  ? 'CGP AOR (Northern Mindanao)'
+                  : selectedAorFilter === 'PCP'
+                  ? 'PCP AOR (Central Luzon)'
+                  : 'Active Station AOR'}
+              </span>
+            </div>
 
-          <div className="space-y-1.5">
-            {isCgpScoped ? (
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-xs bg-cyan-950 border border-cyan-400 inline-block shadow-[0_0_6px_rgba(6,182,212,0.4)]" />
-                <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>CGP AOR (Northern Mind.)</span>
-              </div>
-            ) : selectedAorFilter === 'PCP' ? (
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-xs bg-blue-950 border border-blue-400 inline-block" />
-                <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>PCP AOR (Central Luzon)</span>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-xs bg-blue-950 border border-blue-400 inline-block" />
-                  <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>PCP AOR (Central Luzon)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-xs bg-emerald-950 border border-emerald-400 inline-block" />
-                  <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>BIP AOR (Caraga/Eastern)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-xs bg-cyan-950 border border-cyan-400 inline-block shadow-[0_0_6px_rgba(6,182,212,0.4)]" />
-                  <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>CGP AOR (Northern Mind.)</span>
-                </div>
-              </>
-            )}
-            <div className={`text-[10px] px-2 py-0.5 rounded border font-medium flex items-center gap-1 mt-1 ${
-              mapTheme === 'dark'
-                ? 'text-emerald-400 bg-emerald-950/80 border-emerald-800'
-                : 'text-emerald-700 bg-emerald-50 border-emerald-200'
-            }`}>
-              <span>✓ Snapped to Province Boundaries</span>
+            <div className="flex items-center gap-2.5">
+              <span className="w-3.5 h-3.5 rounded-full bg-rose-500 inline-block ring-2 ring-rose-200 shrink-0" />
+              <span className="font-semibold text-slate-800 text-[11px]">
+                Earthquake Epicenter (Inside AOR)
+              </span>
             </div>
-          </div>
 
-          <div className={`pt-1.5 border-t space-y-1.5 ${mapTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-rose-400/50 shadow-[0_0_8px_#ef4444] inline-block" />
-              <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Epicenter (Inside AOR)</span>
+            <div className="flex items-center gap-2.5">
+              <span className="w-3.5 h-3.5 rounded-full border-2 border-amber-500 bg-white flex items-center justify-center shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              </span>
+              <span className="font-semibold text-slate-800 text-[11px]">
+                {isCgpScoped
+                  ? 'CGP Seismic Station'
+                  : selectedAorFilter === 'PCP'
+                  ? 'PCP Seismic Station'
+                  : 'PHIVOLCS Seismic Station'}
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 ring-1 ring-sky-300 shadow-[0_0_6px_#38bdf8] inline-block" />
-              <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Epicenter (Outside AOR)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 ring-1 ring-amber-300 shadow-[0_0_6px_#f59e0b] inline-block" />
-              <span className={`font-medium ${mapTheme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Province Capital Centroid</span>
-            </div>
-          </div>
-
-          <div className={`pt-2 mt-1 border-t flex items-center justify-between text-[10px] ${
-            mapTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
-          }`}>
-            <span className={`flex items-center gap-1 font-medium truncate ${
-              mapTheme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'
-            }`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <span className="truncate">{BASEMAP_TILES[basemap]?.name || 'Esri GIS Active'}</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowApiKeyModal(true)}
-              className={`font-semibold underline ml-1 cursor-pointer flex items-center gap-1 shrink-0 ${
-                mapTheme === 'dark' ? 'text-cyan-400 hover:text-cyan-300' : 'text-blue-600 hover:text-blue-800'
-              }`}
-              title="Configure or view Map API Key"
-            >
-              <Key className="w-3 h-3 text-cyan-500" />
-              <span>Map Key</span>
-            </button>
           </div>
         </div>
 

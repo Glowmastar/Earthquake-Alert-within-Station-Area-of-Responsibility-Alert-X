@@ -13,6 +13,7 @@ interface RecentAlertsTableProps {
   onRunAorCheck?: () => void;
   onSendPendingAlerts?: () => void;
   onExportReport?: () => void;
+  hideActionButtons?: boolean;
 }
 
 export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
@@ -26,6 +27,7 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
   onRunAorCheck,
   onSendPendingAlerts,
   onExportReport,
+  hideActionButtons = false,
 }) => {
   const displayRecords = records.slice(0, 5);
 
@@ -191,43 +193,45 @@ export const RecentAlertsTable: React.FC<RecentAlertsTableProps> = ({
       </div>
 
       {/* Action Buttons Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <button
-          type="button"
-          onClick={onRefreshData}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Data</span>
-        </button>
+      {!hideActionButtons && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <button
+            type="button"
+            onClick={onRefreshData}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Data</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={onRunAorCheck}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-600 text-blue-600 text-xs font-bold rounded-lg transition-colors shadow-xs"
-        >
-          <Play className="w-3.5 h-3.5 fill-blue-600" />
-          <span>Run AOR Check</span>
-        </button>
+          <button
+            type="button"
+            onClick={onRunAorCheck}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-600 text-blue-600 text-xs font-bold rounded-lg transition-colors shadow-xs"
+          >
+            <Play className="w-3.5 h-3.5 fill-blue-600" />
+            <span>Run AOR Check</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={onSendPendingAlerts}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-600 text-blue-600 text-xs font-bold rounded-lg transition-colors shadow-xs"
-        >
-          <Mail className="w-3.5 h-3.5 text-blue-600" />
-          <span>Send Pending Alerts</span>
-        </button>
+          <button
+            type="button"
+            onClick={onSendPendingAlerts}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-600 text-blue-600 text-xs font-bold rounded-lg transition-colors shadow-xs"
+          >
+            <Mail className="w-3.5 h-3.5 text-blue-600" />
+            <span>Send Pending Alerts</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={onExportReport}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-600 text-blue-600 text-xs font-bold rounded-lg transition-colors shadow-xs"
-        >
-          <Download className="w-3.5 h-3.5 text-blue-600" />
-          <span>Export Report</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={onExportReport}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-600 text-blue-600 text-xs font-bold rounded-lg transition-colors shadow-xs"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-600" />
+            <span>Export Report</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

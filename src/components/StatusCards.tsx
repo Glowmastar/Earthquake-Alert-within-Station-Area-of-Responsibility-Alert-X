@@ -84,22 +84,22 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
   }, [updateTime]);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {/* 1. EQInfo Source */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex items-center gap-3">
+        <div className="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
           <Database className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="text-xs text-slate-500 font-medium block leading-none">
-            EQInfo Source
-          </span>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="text-base font-bold text-slate-900 leading-tight">
-              Connected
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium block leading-none">
+              EQInfo Source
             </span>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 inline-block animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block animate-pulse" />
           </div>
+          <span className="text-base font-bold text-slate-900 leading-tight block mt-1">
+            Connected
+          </span>
           <span className="text-[11px] text-slate-400 block mt-0.5 truncate">
             Receiving real-time data
           </span>
@@ -107,20 +107,20 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
       </div>
 
       {/* 2. Alert Service */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex items-center gap-3">
+        <div className="w-11 h-11 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
           <Settings className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="text-xs text-slate-500 font-medium block leading-none">
-            Alert Service
-          </span>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="text-base font-bold text-slate-900 leading-tight">
-              Active
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium block leading-none">
+              Alert Service
             </span>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 inline-block" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block" />
           </div>
+          <span className="text-base font-bold text-slate-900 leading-tight block mt-1">
+            Active
+          </span>
           <span className="text-[11px] text-slate-400 block mt-0.5 truncate">
             Email service operational
           </span>
@@ -128,20 +128,20 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
       </div>
 
       {/* 3. GIS Dataset */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex items-center gap-3">
+        <div className="w-11 h-11 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
           <Layers className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="text-xs text-slate-500 font-medium block leading-none">
-            GIS Dataset
-          </span>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="text-base font-bold text-slate-900 leading-tight">
-              Approved
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium block leading-none">
+              GIS Dataset
             </span>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 inline-block" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block" />
           </div>
+          <span className="text-base font-bold text-slate-900 leading-tight block mt-1">
+            Approved
+          </span>
           <span className="text-[11px] text-slate-400 block mt-0.5 truncate">
             AOR boundaries up to date
           </span>
@@ -149,8 +149,8 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
       </div>
 
       {/* 4. Last Update */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs flex items-center gap-3.5 relative group">
-        <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex items-center gap-3 relative group">
+        <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
           <Clock className={`w-5 h-5 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
         </div>
         <div className="min-w-0 flex-1">
@@ -174,7 +174,7 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
             {formattedTimeText || 'Synchronizing...'}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-ping" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
             <span className="text-[11px] text-slate-600 font-medium">
               {relativeText}
             </span>

@@ -2401,7 +2401,7 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
               <button
                 type="button"
                 disabled={testSending}
-                onClick={handleSendTestEmail}
+                onClick={() => handleSendTestEmail()}
                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-xs flex items-center gap-1.5"
               >
                 {testSending ? (
@@ -2412,7 +2412,7 @@ export const EmailDesignTemplateView: React.FC<EmailDesignTemplateViewProps> = (
                 ) : (
                   <>
                     <Send className="w-3.5 h-3.5" />
-                    <span>Send Test Bulletin</span>
+                    <span>Send Test Email</span>
                   </>
                 )}
               </button>

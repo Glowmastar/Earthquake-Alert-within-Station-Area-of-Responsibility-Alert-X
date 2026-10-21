@@ -12,6 +12,7 @@ import { PhilippinesMap } from './components/PhilippinesMap';
 import { AlertDeliveryCard } from './components/AlertDeliveryCard';
 import { RecentAlertsTable } from './components/RecentAlertsTable';
 import { EarthquakeModal } from './components/EarthquakeModal';
+import { PendingAlertsModal } from './components/PendingAlertsModal';
 
 // Separate Views
 import { EarthquakeRecordsView } from './views/EarthquakeRecordsView';
@@ -85,6 +86,7 @@ export default function App() {
   const [isSidebarHidden, setIsSidebarHidden] = useState<boolean>(() => {
     return localStorage.getItem('alertx_sidebar_hidden') === 'true';
   });
+  const [isPendingAlertsModalOpen, setIsPendingAlertsModalOpen] = useState<boolean>(false);
 
   // Global Keyboard Shortcut: Ctrl+B or Cmd+B to toggle sidebar visibility
   useEffect(() => {
@@ -167,6 +169,54 @@ export default function App() {
 
   const handleResendAlert = (record: EarthquakeRecord) => {
     showToast(`Alert bulletin re-dispatched to all contacts in ${record.aor} AOR.`);
+  };
+
+  const pendingRecords = useMemo(() => {
+    return scopedEarthquakes.filter(
+      (e) => e.status === 'For Review' || e.status === 'No Alert' || !e.alertDetails?.sentAt
+    );
+  }, [scopedEarthquakes]);
+
+  const handleApproveSinglePendingAlert = (record: EarthquakeRecord) => {
+    setEarthquakes((prev) =>
+      prev.map((eq) =>
+        eq.id === record.id
+          ? {
+              ...eq,
+              status: 'Alert Sent',
+              alertDetails: {
+                ...eq.alertDetails,
+                sentAt: 'Just now (Approved by Station)',
+                deliveryRate: '100%',
+                notes: `Email alert bulletin dispatched to ${record.aor} emergency responders.`,
+              },
+            }
+          : eq
+      )
+    );
+    showToast(`Alert for event ${record.id} successfully dispatched to ${record.aor} emergency contacts.`);
+  };
+
+  const handleDispatchAllPendingAlerts = () => {
+    setEarthquakes((prev) =>
+      prev.map((eq) => {
+        const isPending = eq.status === 'For Review' || eq.status === 'No Alert' || !eq.alertDetails?.sentAt;
+        if (isPending && (currentUser.assignedAor === 'ALL' || eq.aor === currentUser.assignedAor)) {
+          return {
+            ...eq,
+            status: 'Alert Sent',
+            alertDetails: {
+              ...eq.alertDetails,
+              sentAt: 'Just now (Batch Dispatch)',
+              deliveryRate: '100%',
+              notes: 'Dispatched via batch pending alert approval.',
+            },
+          };
+        }
+        return eq;
+      })
+    );
+    showToast('All pending earthquake alerts dispatched to designated emergency contacts.');
   };
 
   const handleAddRecipient = (newRec: Recipient) => {
@@ -657,31 +707,10 @@ export default function App() {
 
           {currentView === 'dashboard' && (
             <>
-              {/* Row 1: System Status Cards (4 cards) */}
-              <StatusCards
-                lastUpdated={lastLiveSyncTime}
-                onRefresh={() => fetchLivePhivolcsData(true, false)}
-                isRefreshing={isFetchingLive}
-              />
-
-              {/* Row 2: 5 Metric Cards */}
-              <MetricCards
-                onNavigate={navigateTo}
-                newCount={scopedNewCount}
-                insideCount={scopedInsideCount}
-                insidePct={scopedInsidePct}
-                sentCount={scopedSentCount}
-                sentPct={scopedSentPct}
-                outsideCount={scopedOutsideCount}
-                outsidePct={scopedOutsidePct}
-                reviewCount={reviewCount}
-                reviewPct={scopedReviewPct}
-              />
-
-              {/* Row 3: 2-Column Split: Map on Left, Recent Alerts Table + Alert Delivery Summary on Right */}
+              {/* 2-Column Dashboard GUI Layout matching user screenshot */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-                {/* Left: Philippines AOR Monitoring Map (7 cols) */}
-                <div className="lg:col-span-7 flex flex-col min-h-[580px]">
+                {/* Left Column (Map): 6 columns */}
+                <div className="lg:col-span-6 flex flex-col h-full min-h-[700px]">
                   <PhilippinesMap
                     earthquakes={scopedEarthquakes}
                     currentUser={currentUser}
@@ -699,8 +728,43 @@ export default function App() {
                   />
                 </div>
 
-                {/* Right: Recent AOR Alerts Table & Alert Delivery Summary (5 cols) */}
-                <div className="lg:col-span-5 flex flex-col space-y-4">
+                {/* Right Column: 4 sections stacked */}
+                <div className="lg:col-span-6 flex flex-col space-y-4">
+                  {/* Section 1: System Status */}
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 tracking-tight mb-2">
+                      System Status
+                    </h3>
+                    <StatusCards
+                      lastUpdated={lastLiveSyncTime}
+                      onRefresh={() => fetchLivePhivolcsData(true, false)}
+                      isRefreshing={isFetchingLive}
+                    />
+                  </div>
+
+                  {/* Section 2: Key Metrics (Last 24 Hours) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                        Key Metrics <span className="text-xs font-normal text-slate-500">(Last 24 Hours)</span>
+                      </h3>
+                    </div>
+                    <MetricCards
+                      onNavigate={navigateTo}
+                      newCount={scopedNewCount}
+                      insideCount={scopedInsideCount}
+                      insidePct={scopedInsidePct}
+                      sentCount={scopedSentCount}
+                      sentPct={scopedSentPct}
+                      outsideCount={scopedOutsideCount}
+                      outsidePct={scopedOutsidePct}
+                      reviewCount={reviewCount}
+                      reviewPct={scopedReviewPct}
+                      onOpenPendingModal={() => setIsPendingAlertsModalOpen(true)}
+                    />
+                  </div>
+
+                  {/* Section 3: Recent AOR Alerts */}
                   <RecentAlertsTable
                     records={scopedEarthquakes}
                     activeEpicenterId={mapIdentifiedEarthquake?.id}
@@ -713,15 +777,40 @@ export default function App() {
                     onViewAllRecords={() => navigateTo('records', 'ALL')}
                     onRefreshData={handleRefreshData}
                     onRunAorCheck={handleRunAorCheck}
-                    onSendPendingAlerts={handleSendPendingAlerts}
+                    onSendPendingAlerts={() => setIsPendingAlertsModalOpen(true)}
                     onExportReport={handleExportReport}
+                    hideActionButtons={true}
                   />
 
+                  {/* Section 4: Alert Delivery Summary */}
                   <AlertDeliveryCard
+                    sentCount={scopedSentCount}
+                    sentPct={scopedSentPct}
+                    pendingCount={reviewCount}
+                    pendingPct={scopedReviewPct}
+                    failedCount={1}
+                    failedPct="(4.2%)"
+                    suppressedCount={0}
+                    suppressedPct="(0.0%)"
                     onViewRecipients={() => setCurrentView('recipients')}
+                    onOpenPendingAlerts={() => setIsPendingAlertsModalOpen(true)}
                   />
                 </div>
               </div>
+
+              {/* Pending Alerts Modal */}
+              {isPendingAlertsModalOpen && (
+                <PendingAlertsModal
+                  pendingRecords={pendingRecords}
+                  onClose={() => setIsPendingAlertsModalOpen(false)}
+                  onApproveAlert={handleApproveSinglePendingAlert}
+                  onDispatchAll={handleDispatchAllPendingAlerts}
+                  onInspectBulletin={(eq) => {
+                    setIsPendingAlertsModalOpen(false);
+                    setSelectedEarthquake(eq);
+                  }}
+                />
+              )}
             </>
           )}
 

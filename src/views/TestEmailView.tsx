@@ -89,9 +89,9 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
   // Brevo Settings State
   const [brevoApiKey, setBrevoApiKey] = useState<string>(() => {
     try {
-      return localStorage.getItem('alertx_brevo_api_key') || 'your-brevo-api-key';
+      return localStorage.getItem('alertx_brevo_api_key') || '';
     } catch {
-      return 'your-brevo-api-key';
+      return '';
     }
   });
   const [brevoSenderEmail, setBrevoSenderEmail] = useState<string>(() => {
@@ -330,7 +330,10 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
         host: 'smtp-relay.brevo.com',
         port: '587',
         secure: false,
-        user: prev.user || currentUser?.email || 'ebardo.glynbryan1@gmail.com',
+        // Brevo's SMTP login can differ from the account email. Require the
+        // user to enter the login shown in Brevo instead of reusing old creds.
+        user: '',
+        pass: '',
       }));
     } else if (preset === 'gmail') {
       setSmtpSettings((prev) => ({
@@ -1902,10 +1905,10 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
                     <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Direct SMTP Relay Active (Port 465 SSL)
+                      Direct SMTP Configuration
                     </div>
                     <p className="text-[11px] text-emerald-800 leading-relaxed">
-                      High-speed direct SMTP relay active over TLS port 465 (<code className="font-mono bg-emerald-100 px-1 rounded">smtp.resend.com:465</code>). Alerts are dispatched directly to live recipient mailboxes with 250 OK delivery confirmation.
+                      Configured for <code className="font-mono bg-emerald-100 px-1 rounded">{smtpSettings.host || 'your SMTP host'}:{smtpSettings.port}</code> using {smtpSettings.secure ? 'SSL/TLS' : 'STARTTLS'}. Confirm these settings and credentials with your email provider.
                     </p>
                   </div>
                 )}
@@ -1918,7 +1921,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                       Brevo SMTP Relay Configuration
                     </div>
                     <p className="text-[11px] text-amber-900 leading-relaxed">
-                      Use your <strong>Brevo login email</strong> as username, and the <strong>Master SMTP key</strong> (from Brevo &rarr; SMTP &amp; API &rarr; SMTP tab) as password. Or use the recommended <strong>Brevo HTTPS API</strong> tab above to avoid SMTP port blocking!
+                      Use the SMTP login shown in Brevo under <strong>Settings &rarr; SMTP &amp; API &rarr; SMTP</strong> as the username. Depending on your account, it may differ from your Brevo account email. Use an <strong>SMTP key</strong> as the password; an API key or account password will not work. Port 587 uses STARTTLS, so leave SSL unchecked.
                     </p>
                   </div>
                 )}
@@ -1974,7 +1977,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                         type="email"
                         value={smtpSettings.user}
                         onChange={(e) => setSmtpSettings({ ...smtpSettings, user: e.target.value })}
-                        placeholder="your-email@gmail.com"
+                        placeholder={smtpSettings.preset === 'brevo' ? 'SMTP login shown in Brevo SMTP settings' : 'your-email@gmail.com'}
                         className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -1997,7 +2000,7 @@ export const TestEmailView: React.FC<TestEmailViewProps> = ({
                         type={showPassword ? 'text' : 'password'}
                         value={smtpSettings.pass}
                         onChange={(e) => setSmtpSettings({ ...smtpSettings, pass: e.target.value })}
-                        placeholder={smtpSettings.preset === 'gmail' ? '16-character Google App Password' : '••••••••••••'}
+                        placeholder={smtpSettings.preset === 'gmail' ? '16-character Google App Password' : smtpSettings.preset === 'brevo' ? 'Brevo SMTP key' : '••••••••••••'}
                         className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg focus:border-blue-500 outline-none"
                       />
                     </div>

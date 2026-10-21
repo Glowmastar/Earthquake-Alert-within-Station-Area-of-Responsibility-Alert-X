@@ -12,36 +12,41 @@ interface MetricCardsProps {
   outsidePct?: string;
   reviewCount?: number;
   reviewPct?: string;
+  showOutside?: boolean;
+  onOpenPendingModal?: () => void;
 }
 
 export const MetricCards: React.FC<MetricCardsProps> = ({
   onNavigate,
-  newCount = 24,
-  insideCount = 14,
-  insidePct = '(58.3%)',
-  sentCount = 11,
-  sentPct = '(45.8%)',
-  outsideCount = 7,
-  outsidePct = '(29.2%)',
-  reviewCount = 3,
-  reviewPct = '(12.5%)',
+  newCount = 11,
+  insideCount = 11,
+  insidePct = '(100.0%)',
+  sentCount = 0,
+  sentPct = '(0.0%)',
+  outsideCount = 0,
+  outsidePct = '(0.0%)',
+  reviewCount = 1,
+  reviewPct = '(9.1%)',
+  showOutside = false,
+  onOpenPendingModal,
 }) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+    <div className={`grid grid-cols-2 ${showOutside ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3`}>
       {/* 1. New Earthquakes */}
       <div
         onClick={() => onNavigate('records', 'ALL')}
-        className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3.5 group"
+        className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3 group"
+        title="View All Records"
       >
-        <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <Activity className="w-6 h-6" />
+        <div className="w-11 h-11 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <Activity className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
           <span className="text-xs font-semibold text-slate-700 block">
             New Earthquakes
           </span>
           <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="text-3xl font-extrabold text-rose-600 leading-none">
+            <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 leading-none">
               {newCount}
             </span>
             <span className="text-xs text-slate-400 truncate">
@@ -54,17 +59,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
       {/* 2. Inside AOR */}
       <div
         onClick={() => onNavigate('records', 'INSIDE_AOR')}
-        className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3.5 group"
+        className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3 group"
+        title="View Inside AOR Records"
       >
-        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <MapPin className="w-6 h-6" />
+        <div className="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <MapPin className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
           <span className="text-xs font-semibold text-slate-700 block">
             Inside AOR
           </span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="text-3xl font-extrabold text-emerald-600 leading-none">
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 leading-none">
               {insideCount}
             </span>
             <span className="text-xs text-emerald-600 font-medium">
@@ -77,17 +83,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
       {/* 3. Alerts Sent */}
       <div
         onClick={() => onNavigate('records', 'ALERT_SENT')}
-        className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3.5 group"
+        className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3 group"
+        title="View Sent Alerts"
       >
-        <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <Mail className="w-6 h-6" />
+        <div className="w-11 h-11 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <Mail className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
           <span className="text-xs font-semibold text-slate-700 block">
             Alerts Sent
           </span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="text-3xl font-extrabold text-blue-600 leading-none">
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 leading-none">
               {sentCount}
             </span>
             <span className="text-xs text-blue-600 font-medium">
@@ -97,43 +104,53 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
         </div>
       </div>
 
-      {/* 4. Outside AOR */}
-      <div
-        onClick={() => onNavigate('records', 'OUTSIDE_AOR')}
-        className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3.5 group"
-      >
-        <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <Navigation className="w-6 h-6 rotate-45" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <span className="text-xs font-semibold text-slate-700 block">
-            Outside AOR
-          </span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="text-3xl font-extrabold text-amber-600 leading-none">
-              {outsideCount}
+      {/* Outside AOR (Optional for full view) */}
+      {showOutside && (
+        <div
+          onClick={() => onNavigate('records', 'OUTSIDE_AOR')}
+          className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3 group"
+          title="View Outside AOR Records"
+        >
+          <div className="w-11 h-11 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Navigation className="w-5 h-5 rotate-45" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-semibold text-slate-700 block">
+              Outside AOR
             </span>
-            <span className="text-xs text-amber-600 font-medium">
-              {outsidePct}
-            </span>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-2xl sm:text-3xl font-extrabold text-amber-600 leading-none">
+                {outsideCount}
+              </span>
+              <span className="text-xs text-amber-600 font-medium">
+                {outsidePct}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 5. For Review */}
+      {/* 4. For Review / Pending */}
       <div
-        onClick={() => onNavigate('exceptions')}
-        className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3.5 group"
+        onClick={() => {
+          if (onOpenPendingModal) {
+            onOpenPendingModal();
+          } else {
+            onNavigate('exceptions');
+          }
+        }}
+        className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-3 group"
+        title="View Pending Alerts / Events for Review"
       >
-        <div className="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <HelpCircle className="w-6 h-6" />
+        <div className="w-11 h-11 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <HelpCircle className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
           <span className="text-xs font-semibold text-slate-700 block">
             For Review
           </span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="text-3xl font-extrabold text-purple-600 leading-none">
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-purple-600 leading-none">
               {reviewCount}
             </span>
             <span className="text-xs text-purple-600 font-medium">

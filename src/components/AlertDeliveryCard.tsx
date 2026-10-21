@@ -3,6 +3,7 @@ import { Mail, Clock, XCircle, Ban } from 'lucide-react';
 
 interface AlertDeliveryCardProps {
   onViewRecipients?: () => void;
+  onOpenPendingAlerts?: () => void;
   sentCount?: number;
   sentPct?: string;
   pendingCount?: number;
@@ -14,6 +15,8 @@ interface AlertDeliveryCardProps {
 }
 
 export const AlertDeliveryCard: React.FC<AlertDeliveryCardProps> = ({
+  onViewRecipients,
+  onOpenPendingAlerts,
   sentCount = 11,
   sentPct = '(45.8%)',
   pendingCount = 3,
@@ -24,10 +27,10 @@ export const AlertDeliveryCard: React.FC<AlertDeliveryCardProps> = ({
   suppressedPct = '(0.0%)',
 }) => {
   return (
-    <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 space-y-3.5">
+    <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-slate-900 tracking-tight">
+        <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Alert Delivery Summary
         </h3>
         <span className="text-xs font-semibold text-slate-500">
@@ -38,7 +41,11 @@ export const AlertDeliveryCard: React.FC<AlertDeliveryCardProps> = ({
       {/* 4 Cards in a Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* 1. Sent */}
-        <div className="bg-slate-50 rounded-xl border border-slate-100 p-3.5 flex items-center gap-3">
+        <div
+          onClick={onViewRecipients}
+          className="bg-slate-50 rounded-xl border border-slate-100 p-3 flex items-center gap-3 hover:border-slate-300 transition-colors cursor-pointer"
+          title="View Recipients & Delivery History"
+        >
           <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
             <Mail className="w-5 h-5" />
           </div>
@@ -47,7 +54,7 @@ export const AlertDeliveryCard: React.FC<AlertDeliveryCardProps> = ({
               Sent
             </span>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-2xl font-extrabold text-slate-900 leading-none">
+              <span className="text-xl sm:text-2xl font-extrabold text-slate-900 leading-none">
                 {sentCount}
               </span>
               <span className="text-[11px] font-medium text-emerald-600">
@@ -58,7 +65,11 @@ export const AlertDeliveryCard: React.FC<AlertDeliveryCardProps> = ({
         </div>
 
         {/* 2. Pending */}
-        <div className="bg-slate-50 rounded-xl border border-slate-100 p-3.5 flex items-center gap-3">
+        <div
+          onClick={onOpenPendingAlerts}
+          className="bg-slate-50 rounded-xl border border-slate-100 p-3 flex items-center gap-3 hover:border-amber-300 hover:bg-amber-50/40 transition-colors cursor-pointer"
+          title="Click to view and dispatch pending alerts modal"
+        >
           <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
             <Clock className="w-5 h-5" />
           </div>
@@ -67,7 +78,7 @@ export const AlertDeliveryCard: React.FC<AlertDeliveryCardProps> = ({
               Pending
             </span>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-2xl font-extrabold text-slate-900 leading-none">
+              <span className="text-xl sm:text-2xl font-extrabold text-slate-900 leading-none">
                 {pendingCount}
               </span>
               <span className="text-[11px] font-medium text-amber-600">
